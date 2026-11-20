@@ -14,6 +14,12 @@ Target: `qualcommbe/ipq53xx`, kernel 6.18.
 > UART adapter. No pre-built images are published until a first boot is
 > confirmed.
 
+> [!NOTE]
+> Most of this port was written with an AI assistant and checked only
+> against the stock firmware files. See
+> [PROVENANCE.md](docs/be550-v2/PROVENANCE.md). Problems with this tree
+> go to the issues of this repository, not to the OpenWrt project.
+
 > [!WARNING]
 > Unofficial community port. Not affiliated with, endorsed by, or supported
 > by TP-Link or the OpenWrt project. No warranty of any kind. Installing
@@ -279,8 +285,8 @@ The most useful things, in this order:
 4. Which LAN jack is which interface (`lan1`..`lan4`), and whether the
    LED commands above work.
 
-Open an issue with the model, the hardware version and the stock firmware
-version the router had.
+Use the "Hardware test report" issue form. Remove MAC addresses, serial
+numbers and Wi-Fi keys from logs first.
 
 ## Related work
 
@@ -292,11 +298,12 @@ and in the v1 pull request.
 - **Archer BE550 v1** is a different platform (IPQ9554, QCA8084 switch,
   QCA8081 WAN PHY). Port: [openwrt/openwrt#25470](https://github.com/openwrt/openwrt/pull/25470),
   based on [#20778](https://github.com/openwrt/openwrt/pull/20778). It
-  runs on hardware. Nothing from it applies to the v2 device tree, but
-  the two models share TP-Link's firmware layout. This port uses the same
-  ideas for the web UI image, the two firmware slots and `tp_data`, and
-  took from the v1 reports that the 5/6 GHz chip needs the stock
-  firmware.
+  runs on hardware. Its device tree does not apply to the v2, but the
+  two models share TP-Link's firmware layout. This port takes from it the
+  web UI image tool (by Sidhant Goel, from the Archer BE800 v1 port
+  [#20373](https://github.com/openwrt/openwrt/pull/20373)), the `tp_data`
+  mount and the method for the two firmware slots, and from its test
+  reports the fact that the 5/6 GHz chip needs the stock firmware.
 - Reports from v1 users that probably apply to the v2 too, none checked
   here: 5 GHz works at 80 MHz but not 160 MHz on channel 36; 6 GHz works
   at 160 MHz but not 320 MHz; `wifi reload` on an MLO interface can leave
@@ -319,7 +326,7 @@ and in the v1 pull request.
 | `package/utils/be550v2-i2cw/` | I2C writer for the LED microcontroller |
 | `package/kernel/be9300v2-switch/` | BE9300 v2 switch setup |
 | `configs/be550-v2.diffconfig`, `configs/be9300-v2.diffconfig` | build configuration |
-| `docs/be550-v2/` | hardware notes, stock device trees |
+| `docs/be550-v2/` | hardware notes, stock device trees, provenance |
 | `contrib/ssdk-harness/` | harness used to get the BE9300 v2 switch setup |
 
 The port is the commits on top of `f351b9ebcb`:
@@ -333,7 +340,21 @@ The port is the commits on top of `f351b9ebcb`:
   switch driver and the ath12k work this port depends on. The other
   documents in `docs/` and `2.4GHZ-Q6-PAS-FINDINGS.md` come from that
   project and describe the Flint 3.
+- Sidhant Goel: `tplink-mkimage-2023.py` (Archer BE800 v1 port).
+- Patrick Lawler and Alexandru Gagniuc: Archer BE550 v1 port, the source
+  of the `tp_data` mount and of the dual-slot upgrade method.
+- The testers in [openwrt/openwrt#25470](https://github.com/openwrt/openwrt/pull/25470)
+  and [#20778](https://github.com/openwrt/openwrt/pull/20778) for the
+  UART, recovery and Wi-Fi firmware findings on the v1.
 - [OpenWrt](https://openwrt.org/).
+
+None of them reviewed or endorses this port. Details:
+[docs/be550-v2/PROVENANCE.md](docs/be550-v2/PROVENANCE.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md): where to report what, what must
+not be posted, and the patch rules (OpenWrt's, with `Signed-off-by`).
 
 ## License
 
