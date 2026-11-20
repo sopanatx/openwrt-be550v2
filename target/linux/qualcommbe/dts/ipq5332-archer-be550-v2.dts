@@ -147,7 +147,40 @@
 	status = "okay";
 };
 
+/*
+ * LED controller MCU. Stock DT turns the QUP at 0x78b7000 into an I2C
+ * master (blsp2_i2c1 on GPIO 33/34, 400 kHz); mainline describes the same
+ * block only as SPI (blsp1_spi2), so the I2C view is added here. Stock
+ * led_combination talks to the MCU at address 0x50 from userspace; see
+ * /usr/sbin/be550v2-led.
+ */
+/ {
+	soc@0 {
+		led_i2c: i2c@78b7000 {
+			compatible = "qcom,i2c-qup-v2.2.1";
+			reg = <0x078b7000 0x600>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			interrupts = <GIC_SPI 294 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&gcc GCC_BLSP1_QUP3_I2C_APPS_CLK>,
+				 <&gcc GCC_BLSP1_AHB_CLK>;
+			clock-names = "core", "iface";
+			clock-frequency = <400000>;
+			pinctrl-0 = <&led_i2c_pins>;
+			pinctrl-names = "default";
+			status = "okay";
+		};
+	};
+};
+
 &tlmm {
+	led_i2c_pins: led-i2c-state {
+		pins = "gpio33", "gpio34";
+		function = "blsp2_i2c1";
+		drive-strength = <8>;
+		bias-pull-up;
+	};
+
 	button_pins: button-state {
 		pins = "gpio24", "gpio29", "gpio35", "gpio36";
 		function = "gpio";

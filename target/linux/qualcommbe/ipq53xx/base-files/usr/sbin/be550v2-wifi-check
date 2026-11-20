@@ -1,0 +1,73 @@
+#!/bin/sh
+# Archer BE550 v2: make sure Wi-Fi comes up, whichever Q6 firmware the SoC
+# accepts.
+#
+# The 2.4 GHz radio is the IPQ5332 itself; its Q6 firmware is authenticated
+# by TrustZone. The three radios are WSI-linked (one ath12k hardware group
+# for MLO), so when the Q6 does not start, 5 GHz and 6 GHz stay down too
+# and no wiphy is registered at all.
+#
+# Run once per boot:
+#   wiphy present                      -> record which firmware works
+#   no wiphy, upstream firmware active -> switch to the unit's own stock Q6
+#                                         firmware (TP-Link signed) and
+#                                         reboot, once
+#   no wiphy, stock firmware active    -> go back to upstream, stop trying
+#
+# State: /etc/be550v2/wifi-fw-state (upstream-ok | stock-tried | stock-ok |
+# failed). Delete the file to start over. "failed" keeps a kernel log in
+# /etc/be550v2/wifi-fail.log.
+
+. /lib/functions.sh
+
+DIR=/etc/be550v2
+STATE=$DIR/wifi-fw-state
+WAIT=${1:-180}
+
+log() { logger -t be550v2-wifi "$*"; echo "$*"; }
+
+[ "$(board_name)" = "tplink,archer-be550-v2" ] || exit 0
+
+mkdir -p "$DIR"
+state=$(cat "$STATE" 2>/dev/null)
+
+have_wiphy() { ls /sys/class/ieee80211/ 2>/dev/null | grep -q .; }
+
+t=0
+while ! have_wiphy && [ "$t" -lt "$WAIT" ]; do
+	sleep 5
+	t=$((t + 5))
+done
+
+if have_wiphy; then
+	case "$state" in
+	stock-tried) echo stock-ok > "$STATE"; log "Wi-Fi up with the stock Q6 firmware" ;;
+	"") echo upstream-ok > "$STATE" ;;
+	esac
+	exit 0
+fi
+
+case "$state" in
+""|upstream-ok)
+	if /usr/sbin/be550v2-stock-wifi-fw install >/dev/null 2>&1; then
+		echo stock-tried > "$STATE"
+		log "no Wi-Fi device after ${WAIT}s: switching to the stock Q6 firmware and rebooting"
+		sync
+		reboot
+	else
+		echo failed > "$STATE"
+		dmesg | grep -iE 'ath12k|remoteproc|q6v5|qcom_scm|mhi' > "$DIR/wifi-fail.log"
+		log "no Wi-Fi device and no stock Q6 firmware to fall back to; see $DIR/wifi-fail.log"
+	fi
+	;;
+stock-tried|stock-ok)
+	dmesg | grep -iE 'ath12k|remoteproc|q6v5|qcom_scm|mhi' > "$DIR/wifi-fail.log"
+	/usr/sbin/be550v2-stock-wifi-fw remove >/dev/null 2>&1
+	echo failed > "$STATE"
+	log "no Wi-Fi device with the stock Q6 firmware either; upstream firmware restored, see $DIR/wifi-fail.log"
+	;;
+failed)
+	log "no Wi-Fi device (firmware fallback already tried); see $DIR/wifi-fail.log"
+	;;
+esac
+exit 0

@@ -1,0 +1,10 @@
+#!/bin/sh /etc/rc.common
+# Archer BE550 v2: Q6 firmware fallback, see /usr/sbin/be550v2-wifi-check
+
+START=99
+
+boot() {
+	. /lib/functions.sh
+	[ "$(board_name)" = "tplink,archer-be550-v2" ] || return 0
+	/usr/sbin/be550v2-wifi-check </dev/null >/dev/null 2>&1 &
+}

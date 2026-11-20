@@ -1,18 +1,27 @@
 #!/bin/sh
-# Archer BE550 v2: copy the IPQ5332 (2.4 GHz) Q6 firmware from the stock
-# TP-Link firmware that is still installed in the other NAND slot.
+# Archer BE550 v2: use the IPQ5332 (2.4 GHz) Q6 firmware from the stock
+# TP-Link firmware instead of the one shipped with OpenWrt.
 #
 # The stock Q6 images carry a TP-Link certificate chain. If this SoC only
 # accepts TP-Link-signed Q6 firmware, the upstream ath12k-firmware-ipq5332
-# files fail to load and the 2.4 GHz radio stays down. This script copies
-# the unit's own stock files into /lib/firmware (overlay) so ath12k uses
-# them instead. Nothing is written to the stock slot.
+# files fail to load and the 2.4 GHz radio stays down.
 #
-# usage: be550v2-stock-wifi-fw [install|remove]
+#   save     copy the stock files from the other NAND slot to
+#            /etc/be550v2/stock-q6 (kept across sysupgrade, not active).
+#            Runs once on first boot.
+#   install  put the stock files in /lib/firmware so ath12k uses them.
+#            Source: the other slot if it still holds stock, else the
+#            saved copy.
+#   remove   go back to the firmware shipped with OpenWrt.
+#
+# Nothing is written to the stock slot.
+#
+# usage: be550v2-stock-wifi-fw [save|install|remove]
 
 . /lib/functions.sh
 
 DEST=/lib/firmware/ath12k/IPQ5332/hw1.0
+SAVED=/etc/be550v2/stock-q6
 MNT=/tmp/stock-rootfs
 SRC_DIR=lib/firmware/IPQ5332/WIFI_FW
 
@@ -22,51 +31,81 @@ cleanup() {
 	grep -q " $MNT " /proc/mounts && umount "$MNT"
 	[ -n "$BLOCK" ] && ubiblock -r "$BLOCK" 2>/dev/null
 	[ -n "$UBI_ATTACHED" ] && ubidetach -d "$UBI_ATTACHED" 2>/dev/null
+	BLOCK=
+	UBI_ATTACHED=
+}
+
+# mount the stock rootfs of the slot we did not boot from; 1 if not stock
+mount_stock() {
+	local other=rootfs mtd ubi vol
+
+	grep -q 'ubi.mtd=rootfs_1' /proc/cmdline || other=rootfs_1
+
+	mtd=$(find_mtd_index "$other")
+	[ -n "$mtd" ] || return 1
+
+	ubi=$(ubiattach -m "$mtd" 2>/dev/null | sed -n 's/.*device number \([0-9]*\).*/\1/p')
+	[ -n "$ubi" ] || return 1
+	UBI_ATTACHED=$ubi
+
+	vol=$(ubinfo -d "$ubi" -N ubi_rootfs 2>/dev/null | sed -n 's/^Volume ID: *\([0-9]*\).*/\1/p')
+	[ -n "$vol" ] || { cleanup; return 1; }
+
+	ubiblock -c "/dev/ubi${ubi}_${vol}" || { cleanup; return 1; }
+	BLOCK="/dev/ubi${ubi}_${vol}"
+
+	mkdir -p "$MNT"
+	mount -t squashfs -o ro "/dev/ubiblock${ubi}_${vol}" "$MNT" || { cleanup; return 1; }
+
+	[ -f "$MNT/$SRC_DIR/q6_fw0.mdt" ] || { cleanup; return 1; }
+}
+
+# copy the Q6 files from directory $1 to directory $2
+copy_fw() {
+	local f
+
+	mkdir -p "$2"
+	for f in "$1"/q6_fw0.* "$1"/q6_fw1.* "$1"/iu_fw.* "$1"/fw_version.txt; do
+		[ -f "$f" ] || continue
+		case "$f" in *.flist) continue ;; esac
+		cp "$f" "$2/" || return 1
+	done
 }
 
 [ "$(board_name)" = "tplink,archer-be550-v2" ] || die "not an Archer BE550 v2"
 
 case "${1:-install}" in
+save)
+	[ -f "$SAVED/q6_fw0.mdt" ] && { echo "Already saved in $SAVED."; exit 0; }
+	mount_stock || die "the other slot does not hold the stock firmware"
+	copy_fw "$MNT/$SRC_DIR" "$SAVED.tmp" || { rm -rf "$SAVED.tmp"; die "copy failed"; }
+	rm -rf "$SAVED"
+	mv "$SAVED.tmp" "$SAVED"
+	cleanup
+	echo "Stock IPQ5332 Q6 firmware saved in $SAVED."
+	;;
+install)
+	if mount_stock; then
+		src="$MNT/$SRC_DIR"
+	elif [ -f "$SAVED/q6_fw0.mdt" ]; then
+		src="$SAVED"
+	else
+		die "no stock Q6 firmware: the other slot is not stock and nothing is saved in $SAVED"
+	fi
+	cat "$src/fw_version.txt" 2>/dev/null
+	copy_fw "$src" "$DEST" || die "copy to $DEST failed"
+	rm -f "$DEST/fw_version.txt"
+	cleanup
+	echo "Stock IPQ5332 Q6 firmware installed in $DEST. Reboot to use it."
+	echo "Undo with: $0 remove"
+	;;
 remove)
 	for f in "$DEST"/q6_fw0.* "$DEST"/q6_fw1.* "$DEST"/iu_fw.*; do
 		[ -e "/rom$f" ] && cp -a "/rom$f" "$f" || rm -f "$f"
 	done
 	echo "Restored the firmware shipped with OpenWrt. Reboot to use it."
-	exit 0
 	;;
-install) ;;
-*) die "usage: $0 [install|remove]" ;;
+*)
+	die "usage: $0 [save|install|remove]"
+	;;
 esac
-
-# the slot we did not boot from
-other=rootfs
-grep -q 'ubi.mtd=rootfs_1' /proc/cmdline || other=rootfs_1
-
-mtd=$(find_mtd_index "$other")
-[ -n "$mtd" ] || die "no $other partition"
-
-ubi=$(ubiattach -m "$mtd" 2>/dev/null | sed -n 's/.*device number \([0-9]*\).*/\1/p')
-[ -n "$ubi" ] || die "cannot attach $other (already attached, or not UBI)"
-UBI_ATTACHED=$ubi
-
-vol=$(ubinfo -d "$ubi" -N ubi_rootfs 2>/dev/null | sed -n 's/^Volume ID: *\([0-9]*\).*/\1/p')
-[ -n "$vol" ] || die "$other does not hold the stock firmware (no ubi_rootfs volume)"
-
-ubiblock -c "/dev/ubi${ubi}_${vol}" || die "cannot create ubiblock"
-BLOCK="/dev/ubi${ubi}_${vol}"
-
-mkdir -p "$MNT"
-mount -t squashfs -o ro "/dev/ubiblock${ubi}_${vol}" "$MNT" || die "cannot mount stock rootfs"
-
-[ -f "$MNT/$SRC_DIR/q6_fw0.mdt" ] || die "stock Q6 firmware not found"
-cat "$MNT/$SRC_DIR/fw_version.txt" 2>/dev/null
-
-mkdir -p "$DEST"
-for f in "$MNT/$SRC_DIR"/q6_fw0.* "$MNT/$SRC_DIR"/q6_fw1.* "$MNT/$SRC_DIR"/iu_fw.*; do
-	case "$f" in *.flist) continue ;; esac
-	cp "$f" "$DEST/" || die "copy of $f failed"
-done
-
-cleanup
-echo "Stock IPQ5332 Q6 firmware installed in $DEST. Reboot to use it."
-echo "Undo with: $0 remove"

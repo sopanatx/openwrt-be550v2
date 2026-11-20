@@ -1,0 +1,11 @@
+#!/bin/sh /etc/rc.common
+# Archer BE550 v2: show a steady LED once boot is done.
+
+START=99
+
+boot() {
+	. /lib/functions.sh
+	[ "$(board_name)" = "tplink,archer-be550-v2" ] || return 0
+	/usr/sbin/be550v2-led on 2>/dev/null
+	return 0
+}
