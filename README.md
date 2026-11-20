@@ -1,174 +1,287 @@
-# OpenWrt for the GL.iNet Flint 3 (GL-BE9300)
+# OpenWrt for the TP-Link Archer BE550 v2
 
-<a href="https://ko-fi.com/C8Y320ZTT2"><img src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" height="36" alt="Buy Me a Coffee at ko-fi.com"></a>
+OpenWrt source tree with board support for the **TP-Link Archer BE550 v2**
+(Wi-Fi 7, Qualcomm IPQ5332). The **Archer BE9300 v2** shares the board and
+has its own profile in the same tree.
 
-Mainline **OpenWrt** support for the **GL.iNet Flint 3 (GL-BE9300)** — Qualcomm
-**IPQ5332** (quad Cortex-A53) with tri-band Wi-Fi 7, a Realtek **RTL8372N** 10G
-switch and a **RTL8221B** 2.5G WAN PHY.
+Target: `qualcommbe/ipq53xx`, kernel 6.18.
 
-> **This branch (`flint3-be9300`) is a complete, buildable OpenWrt tree.**
-> Clone it and build — there is nothing to drop into another checkout.
-> (An earlier `main` branch held a target *overlay*; it is retired and
-> preserved at the tag `archive/main-overlay`.)
-
-Target: **`qualcommbe/ipq53xx`**, kernel **6.18**.
+> [!CAUTION]
+> **This port has never run on real hardware.** The images build and were
+> checked offline against the stock firmware 1.3.3, nothing more. It may
+> not boot, and a failed install may leave the router unusable.
+> Do not install it on a router you need, and do not install it without a
+> UART adapter. No pre-built images are published until a first boot is
+> confirmed.
 
 > [!WARNING]
-> **Unofficial, community-maintained port — not affiliated with, endorsed by, or supported
-> by GL.iNet or the OpenWrt project.** Provided **as-is, with no warranty of any kind**.
-> Flashing third-party firmware carries real risk, including bricking the device, and may
-> void your hardware warranty. **Back up your eMMC first** — the ART partition holds your
-> unit's unique radio calibration data and MAC addresses and cannot be recovered from
-> anywhere else. If this router matters to you, test on a spare unit before relying on it.
+> Unofficial community port. Not affiliated with, endorsed by, or supported
+> by TP-Link or the OpenWrt project. No warranty of any kind. Installing
+> third-party firmware can void the hardware warranty.
+
+This is for **hardware version 2** only. The Archer BE550 v1 is a
+different board.
+
+## Supported models
+
+The two models use the same stock firmware file but different LAN
+hardware. Check the label under the router. The LAN jacks also tell them
+apart:
+
+| Model | LAN ports | Profile |
+|---|---|---|
+| Archer BE550 v2 | 4x 2.5G | `tplink_archer-be550-v2` |
+| Archer BE9300 v2 | 1x 2.5G + 3x 1G | `tplink_archer-be9300-v2` |
+
+Each image lists only its own model, so the stock web UI rejects the
+image of the other model.
 
 ## Hardware
 
 | Block | Detail |
 |---|---|
-| SoC | Qualcomm IPQ5332, 4× Cortex-A53 |
-| Wi-Fi 2.4 GHz | on-SoC radio, ath12k over AHB |
-| Wi-Fi 5 / 6 GHz | 2× QCN9274, ath12k over PCIe |
-| Switch | RTL8372N, out-of-tree DSA driver (`realtek,rtl837x`); SoC↔switch link is 10GBASE-R |
-| WAN | RTL8221B 2.5G, USXGMII |
-| Storage | eMMC |
+| SoC | Qualcomm IPQ5332, 4x Cortex-A53, reference design AP-MI01.6 |
+| RAM | 512 MiB DDR4 |
+| Flash | 128 MiB SPI NAND, two firmware slots (A/B) |
+| Wi-Fi 2.4 GHz | IPQ5332 internal radio, ath12k (AHB) |
+| Wi-Fi 5 + 6 GHz | one QCN9224 (QCN9274 family), dual-MAC, ath12k (PCIe) |
+| WAN | 2.5G, Realtek RTL8221B |
+| LAN, BE550 v2 | 4x 2.5G, Realtek RTL8372 switch (DSA, `kmod-rtl837x-dsa`) |
+| LAN, BE9300 v2 | RTL8367D-family switch (ID 0x6642) + second RTL8221B |
+| USB | 1x USB 3.0 |
+| LED | RGB LED driven by a microcontroller on I2C (address 0x50) |
+| Buttons | reset, WPS, Wi-Fi, LED |
+| UART | 115200 8N1 |
+
+Full map (partitions, GPIOs, switch setup, LED protocol, stock upgrade
+format): [docs/be550-v2/HARDWARE.md](docs/be550-v2/HARDWARE.md).
+Stock device trees: [docs/be550-v2/stock/](docs/be550-v2/stock/).
 
 ## Status
 
-| Subsystem | State |
-|---|---|
-| Boot / procd / SSH | working |
-| LAN (RTL8372N via DSA + EDMA/PPE) | working |
-| WAN (2.5G, USXGMII) | working, links at 2.5 Gbps |
-| VLANs (bridge-vlan on DSA) | working |
-| PPE hardware flow offload | IPv4 LAN→WAN NAT (TCP/UDP, untagged or 802.1Q WAN) ~2.3 Gbit/s at ~1% CPU; opt-in via the firewall's hardware flow offloading. WAN→LAN and IPv6 in the next release |
-| Wi-Fi 7, all three bands | working |
-| MLO (AP MLD across 2.4/5/6 GHz) | working |
-| DFS | working, including several BSSes per DFS radio started together |
-| 802.11k / 802.11v | working |
-| eMMC sysupgrade + return to stock | working |
+Nothing in this table is confirmed on a router. "Built" means the code is
+in the image and was checked against stock data or stock code.
 
-Throughput measured between two units over a 2.5G trunk: **~1.8–1.9 Gbit/s**.
+| Feature | State | Note |
+|---|---|---|
+| Image build (both models) | Built | |
+| Stock web UI accepts the image | Built | header, MD5, support list and version checked against the stock upgrade tool |
+| Boot | Unknown | the FIT config name TP-Link U-Boot asks for is not known; the image carries four candidates |
+| WAN 2.5G | Built | |
+| LAN switch, BE550 v2 | Built | register setup matches the stock driver |
+| LAN port order, BE550 v2 | Built | from the stock configuration, not checked with a cable |
+| LAN switch, BE9300 v2 | Built | unmanaged, see below |
+| Wi-Fi 2.4 / 5 / 6 GHz | Unknown | see "Wi-Fi firmware" |
+| Wi-Fi MAC addresses, calibration | Built | read from the stock partitions |
+| LED | Built | frames equal the stock ones byte for byte, not tried on the microcontroller |
+| Buttons, USB | Built | |
+| sysupgrade (A/B slots) | Built | |
+| Return to stock | Untested | see "Return to stock" |
 
-## Known issues
+### Wi-Fi firmware
 
-- **ath12k firmware hang under sustained load.** After hours with many clients
-  the Q6 can take a fatal error. Since 2026-09-28 the firmware coredump is
-  released automatically and the radios recover in seconds instead of staying
-  down; the cause of the crash itself is still open. Reported upstream.
-- **Kernel panic in netlink socket release**, seen six times since August on
-  both APs after hours of uptime (sockets of a bridge notification, hostapd
-  or wsdd2). The AP reboots itself in ~90 s. wsdd2 is kept disabled as one
-  trigger; root cause under investigation with a KASAN kernel.
-- **Client kicks for "excessive missing ACKs"**: the driver's packet-loss
-  events are unreliable for multi-link stations, so hostapd's
-  `disassoc_low_ack` now defaults to 0 in these images (set it to 1 on a
-  wifi-iface to restore the old behaviour).
-- **PPE WAN RX FIFO overruns.** Roughly 0.07–0.09 % of packets at ~1.9 Gbit/s.
-  No longer the hard ~600 Mbit/s cap earlier builds had, but not zero.
-- **802.11r is incompatible with MLO.** hostapd's FT code has no MLD
-  awareness — do not enable 11r on an MLO SSID. 11k/11v are fine.
+The stock firmware for the 2.4 GHz radio is signed by TP-Link. The
+firmware that OpenWrt ships is signed by Qualcomm. If the SoC accepts only
+TP-Link's signature, the 2.4 GHz radio does not start, and the 5 and 6 GHz
+radios stay down with it (the three radios are linked for MLO).
 
-## Building
+The image handles this without user action:
+
+1. The first boot copies the router's own stock firmware files from the
+   stock slot to `/etc/be550v2/stock-q6`. A sysupgrade keeps them.
+2. `be550v2-wifi-check` runs at each boot. If no Wi-Fi device appears in
+   180 seconds, it installs the stock files and reboots once.
+3. If Wi-Fi still does not start, it restores the OpenWrt files, writes
+   `/etc/be550v2/wifi-fail.log` and stops.
+
+State: `cat /etc/be550v2/wifi-fw-state`. Manual control:
+`be550v2-stock-wifi-fw install|remove`.
+
+It is possible that neither firmware works with ath12k. Then no band
+works until someone finds the cause.
+
+### Archer BE9300 v2
+
+No Linux driver supports this board's LAN switch with two SerDes ports.
+The image does this instead:
+
+- `kmod-be9300v2-switch` checks the chip ID, then replays the 602 register
+  writes of the stock firmware for the switch, and the stock setup of the
+  LAN1 PHY. The list came from running the stock switch code in a harness
+  ([contrib/ssdk-harness](contrib/ssdk-harness)).
+- The switch is unmanaged: one `lan` interface, all four LAN jacks in one
+  segment, no link state, VLAN or statistics per port.
+- `be9300v2-lan-rescue`: 3 minutes after boot, if no frame arrived on
+  `lan` and WAN has no IPv4 address, the WAN jack joins `br-lan` until the
+  next reboot. A PC on the WAN jack then reaches 192.168.1.1 even if the
+  switch setup failed.
+
+This model carries more risk than the BE550 v2. Check after install:
+`dmesg | grep -i be9300v2` and `logread | grep rescue`.
+
+## Build
+
+Build on Linux (Debian or Ubuntu), or in a container. Do not build as
+root. On macOS use Docker, with the tree on a Linux volume: the build
+needs a case-sensitive file system.
+
+Packages on Debian 12:
 
 ```sh
-git clone -b flint3-be9300 https://github.com/perceival/openwrt-flint3.git
-cd openwrt-flint3
+sudo apt install build-essential clang flex bison g++ gawk gcc-multilib \
+  g++-multilib gettext git libncurses-dev libssl-dev python3-setuptools \
+  python3-dev rsync swig unzip zlib1g-dev file wget zstd
+```
+
+(`gcc-multilib` and `g++-multilib` do not exist on arm64 hosts; leave
+them out there.)
+
+```sh
+git clone <this repository> openwrt-be550v2
+cd openwrt-be550v2
 ./scripts/feeds update -a
 ./scripts/feeds install -a
-make menuconfig     # Target System: Qualcomm Atheros 802.11be
-                    # Subtarget:     ipq53xx
-                    # Target Profile: GL.iNet GL-BE9300
+cp configs/be550-v2.diffconfig .config      # or configs/be9300-v2.diffconfig
+make defconfig
 make -j"$(nproc)"
 ```
 
-Images land in `bin/targets/qualcommbe/ipq53xx/`.
+The two `diffconfig` files select the device and LuCI. Use
+`make menuconfig` to add packages.
 
-### Don't want to build from source?
+A tree holds one device at a time. To change the model, delete `.config`,
+copy the other `diffconfig` and run `make defconfig` again. (If you edit
+`.config` by hand, remove the `CONFIG_PACKAGE_kmod-rtl837x-dsa` and
+`CONFIG_PACKAGE_kmod-be9300v2-switch` lines, or the switch driver of the
+other model stays selected.)
 
-Pre-built reference images are published periodically on the
-**[Releases page](https://github.com/perceival/openwrt-flint3/releases)**, in three flavours:
+Images are in `bin/targets/qualcommbe/ipq53xx/`:
 
-- **`vanilla`** — the exact, unmodified default this tree produces with zero customization
-  (no LuCI, `wpad-basic-mbedtls`) — what you'd get building it yourself with no changes
-- **`ap`** — full config (LuCI, tri-band MLO) plus the FT-over-MLO roaming series; what the
-  maintainer's own household runs
-- **`router`** — gateway role: LuCI, WireGuard, unbound, chrony, mDNS reflection; nftables
-  flowtable offload in software by default, PPE hardware offload opt-in (see Status)
+| File | Use |
+|---|---|
+| `*-initramfs.itb` | boots from RAM over TFTP, writes nothing to flash (needs UART) |
+| `*-squashfs-web-ui-factory.bin` | first install from the stock web UI |
+| `*-squashfs-sysupgrade.bin` | later upgrades from OpenWrt |
+| `*-squashfs-factory.ubi` | raw UBI image of one firmware slot, for U-Boot |
 
-See the disclaimer above before flashing any of them.
+## Install
 
-## Installing
+### Before you start
 
-Full, hardware-verified instructions — including the round trip back to stock —
-are on the device page:
+- Get a USB-UART adapter. Measure the voltage on the router's TX pin
+  first (3.3 V or 1.8 V) and set the adapter to match. Connect GND, RX and
+  TX only, never VCC. Settings: 115200 8N1.
+- Without UART there is no known way to recover a router that does not
+  boot. A TFTP recovery mode in TP-Link's U-Boot is not confirmed for this
+  model.
 
-**https://openwrt.org/toh/gl.inet/gl-be9300**
+### A. Test from RAM (recommended first step)
 
-Short version: from stock firmware, use the **factory** image with
-`sysupgrade -F -n`. The stock image check requires a QSDK FIT, so `-F` is
-required and the "missing section" warnings for `u-boot`/`tz`/`sb11` are
-expected. Do **not** force the plain sysupgrade image from stock.
+Boot the `initramfs.itb` image from U-Boot over TFTP. Flash is not
+written; a power cycle returns to the stock firmware.
 
-Stock QSDK firmware may report `qcom,ipq5332-ap-mi01.6` as its board name.
-That is the generic Qualcomm MI01.6/RDP468 identity used by the vendor path,
-not the OpenWrt GL-BE9300 device identifier. The same compatible is used by
-the upstream Qualcomm RDP468 device tree, so it is intentionally not added to
-this profile's `SUPPORTED_DEVICES`: doing so would advertise the Flint 3 image
-as compatible with other hardware using that generic identity. The resulting
-stock compatibility warning is therefore expected; use the documented `-F`
-factory-image path instead (see [issue #9](https://github.com/perceival/openwrt-flint3/issues/9)).
+The exact U-Boot commands are not written here yet: the load address and
+the FIT config name must come from a real unit. If you have UART access,
+please send the stock boot log and the output of `printenv` (see
+"Reports wanted").
 
-**Back up your eMMC first** — the ART partition holds this unit's radio
-calibration and MAC addresses and cannot be recovered from anywhere else.
+### B. Install from the stock web UI
 
-## Other boards
+At your own risk. The stock updater writes only the inactive slot, and
+the stock firmware stays in the other slot. It is not confirmed that
+U-Boot falls back to that slot when the new one fails.
 
-Only the GL-BE9300 is tested here. The tree is a `qualcommbe/ipq53xx` target, and anything that
-is not board-specific — the IPQ5332 clocks, PCIe, PPE/EDMA Ethernet and hardware offload, ath12k
-Wi-Fi and the firmware-recovery handler — is shared by every IPQ53xx device. What a new board
-needs is a device tree, an image definition and, if its switch is not a Realtek RTL837x, a
-matching switch driver.
+1. Stock web UI: Advanced > System > Firmware Update. Upload
+   `*-squashfs-web-ui-factory.bin` for your model.
+2. OpenWrt answers at `192.168.1.1` on LAN. SSH user `root`, no password.
+   Set a password at once.
+3. Back up the calibration and factory data before anything else, and
+   copy the files off the router:
 
-**Defined in this tree, untested by me** (images are not published for them):
+   ```sh
+   cat /proc/mtd                    # find ART and tp_data
+   cat /dev/mtdX > /tmp/art.bin
+   ```
 
-| Board | SoC | Switch | Flash | Origin | Notes |
-|---|---|---|---|---|---|
-| GL.iNet GL-BE6500 | IPQ5332 + QCN9274 | RTL837x (same driver) | NAND (UBI) | [JiaY-shi](https://github.com/JiaY-shi/openwrt) | closest relative; builds from this tree |
-| Ubiquiti UniFi 7 Pro XGS | IPQ5332 | none (single 10G PHY) | eMMC + SPI-NOR | Til Kaiser, upstream [#25185](https://github.com/openwrt/openwrt/pull/25185) | needs a bootloader downgrade (newer ones enforce signatures) |
+   The ART partition holds the radio calibration of your unit. It cannot
+   be replaced.
+4. Wait about 4 minutes for Wi-Fi on the first boot. The router can
+   reboot once by itself to change the Wi-Fi firmware.
 
-**Other IPQ53xx devices with community work** (not in this tree):
+### Upgrade
 
-| Device | SoC | Switch | Status |
-|---|---|---|---|
-| Xiaomi BE3600 Pro (RN01) | IPQ5312 | Motorcomm YT9215S | ported on top of the upstream ipq53xx PR (Ethernet, storage, boot reported working) — [#23161](https://github.com/openwrt/openwrt/pull/23161) |
+From OpenWrt: `sysupgrade <file>-squashfs-sysupgrade.bin`.
 
-**Upstream:** OpenWrt main has no IPQ53xx support yet. The subtarget is proposed in
-[openwrt/openwrt#23161](https://github.com/openwrt/openwrt/pull/23161) (open). The RTL8372N
-switch driver used here exists only in this tree.
+### Return to stock
 
-**Testers wanted.** If you own a GL-BE6500, a UniFi 7 Pro XGS or another IPQ53xx device and are
-comfortable with a serial console and an eMMC/NAND backup, I would like to hear from you: open an
-issue with the model, a boot log from stock and a photo of the board. Board support that nobody
-can test stays unpublished, and a second set of hands is the fastest way to change that. PRs
-bringing up another board on top of this branch are welcome too.
+Untested. The stock firmware stays in the slot that OpenWrt did not
+overwrite, until the first sysupgrade writes to it. The U-Boot variable
+`tp_boot_idx` selects the slot (`fw_printenv tp_boot_idx`). Do not rely
+on this before someone confirms it with UART attached.
 
-## Upstream
+## LED
 
-Patches from this work that have gone upstream or are in review:
+```sh
+be550v2-led status internet-up      # stock status events
+be550v2-led on ff8800               # static colour, RRGGBB
+be550v2-led mode breathing 0000ff
+be550v2-led off
+```
 
-- `wifi: ath12k: advertise AP_VLAN interface mode for IPQ5332` (linux-wireless)
-- hostapd WDS/AP_VLAN `bss->ctx` fix (applied by Jouni Malinen)
-- ath12k `hw_scan` NULL-deref report (with the Qualcomm dev team)
+Boot, WAN up/down, reboot and sysupgrade send the stock status events.
 
-## Links
+## Reports wanted
 
-- Forum thread: https://forum.openwrt.org/t/gl-inet-flint-3-exploration-gl-be9300-ipq5332/250267
-- Device page: https://openwrt.org/toh/gl.inet/gl-be9300
-- Q6/PAS research notes: [`2.4GHZ-Q6-PAS-FINDINGS.md`](2.4GHZ-Q6-PAS-FINDINGS.md)
+The most useful things, in this order:
+
+1. Stock boot log over UART, and `printenv` from U-Boot.
+2. Boot log of the `initramfs.itb` image.
+3. After a boot, the output of:
+
+   ```sh
+   dmesg | grep -iE 'ath12k|rtl837|be9300v2|ppe|i2c|ubi'
+   cat /etc/be550v2/wifi-fw-state
+   iw dev
+   ip -br link
+   ```
+
+4. Which LAN jack is which interface (`lan1`..`lan4`), and whether the
+   LED commands above work.
+
+Open an issue with the model, the hardware version and the stock firmware
+version the router had.
+
+## Where the port is
+
+| Path | Content |
+|---|---|
+| `target/linux/qualcommbe/dts/ipq5332-archer-be550-v2.dts` | device tree, BE550 v2 |
+| `target/linux/qualcommbe/dts/ipq5332-archer-be9300-v2.dts` | device tree, BE9300 v2 |
+| `target/linux/qualcommbe/image/ipq53xx.mk` | image recipes |
+| `target/linux/qualcommbe/ipq53xx/base-files/` | network setup, MAC addresses, Wi-Fi firmware fallback, LED, sysupgrade |
+| `scripts/tplink-mkimage-2023.py` | TP-Link web UI image container |
+| `package/firmware/ipq-wifi/` | Wi-Fi board files |
+| `package/utils/be550v2-i2cw/` | I2C writer for the LED microcontroller |
+| `package/kernel/be9300v2-switch/` | BE9300 v2 switch setup |
+| `configs/be550-v2.diffconfig`, `configs/be9300-v2.diffconfig` | build configuration |
+| `docs/be550-v2/` | hardware notes, stock device trees |
+| `contrib/ssdk-harness/` | harness used to get the BE9300 v2 switch setup |
+
+The port is the commits on top of `f351b9ebcb`:
+`git log --oneline f351b9ebcb..`.
 
 ## Credits
 
-Built on [JiaY-shi's](https://github.com/JiaY-shi/openwrt) GL-BE6500 tree, which
-provided the working IPQ5332 Wi-Fi and RTL837x DSA foundation. Thanks to
-everyone contributing hardware findings and testing via the issue tracker and
-the forum thread.
+- Base tree: [perceival/openwrt-flint3](https://github.com/perceival/openwrt-flint3),
+  the OpenWrt port for the GL.iNet Flint 3 (GL-BE9300). It uses the same
+  Qualcomm reference design, and provides the IPQ5332 target, the RTL8372
+  switch driver and the ath12k work this port depends on. The other
+  documents in `docs/` and `2.4GHZ-Q6-PAS-FINDINGS.md` come from that
+  project and describe the Flint 3.
+- [OpenWrt](https://openwrt.org/).
+
+## License
+
+GPL-2.0, as OpenWrt. See [COPYING](COPYING) and [LICENSES](LICENSES).
+The Wi-Fi board files in `package/firmware/ipq-wifi/` and the device trees
+in `docs/be550-v2/stock/` come from the TP-Link stock firmware.
