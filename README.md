@@ -18,7 +18,8 @@ Target: `qualcommbe/ipq53xx`, kernel 6.18.
 > Most of this port was written with an AI assistant and checked only
 > against the stock firmware files. See
 > [PROVENANCE.md](docs/be550-v2/PROVENANCE.md). Problems with this tree
-> go to the issues of this repository, not to the OpenWrt project.
+> go to [its issues](https://github.com/sopanatx/openwrt-be550v2/issues),
+> not to the OpenWrt project.
 
 > [!WARNING]
 > Unofficial community port. Not affiliated with, endorsed by, or supported
@@ -28,19 +29,49 @@ Target: `qualcommbe/ipq53xx`, kernel 6.18.
 This is for **hardware version 2** only. The Archer BE550 v1 is a
 different board.
 
+Repository: <https://github.com/sopanatx/openwrt-be550v2> (branch
+`main`). It is a fork of the Flint 3 tree; the other branches and the
+tags come from that project.
+
 ## Supported models
 
-The two models use the same stock firmware file but different LAN
-hardware. Check the label under the router. The LAN jacks also tell them
-apart:
+| Model on the label | Hardware version | LAN ports | Build profile | State |
+|---|---|---|---|---|
+| Archer BE550 | Ver 2.0, 2.6, 2.26 | 4x 2.5G | `tplink_archer-be550-v2` | builds, untested |
+| Archer BE9300 | Ver 2.0 | 1x 2.5G + 3x 1G | `tplink_archer-be9300-v2` | builds, untested, more risk |
 
-| Model | LAN ports | Profile |
-|---|---|---|
-| Archer BE550 v2 | 4x 2.5G | `tplink_archer-be550-v2` |
-| Archer BE9300 v2 | 1x 2.5G + 3x 1G | `tplink_archer-be9300-v2` |
+How to find your model:
 
-Each image lists only its own model, so the stock web UI rejects the
-image of the other model.
+- Read the label under the router: model name and "Ver".
+- Count the LAN jacks marked 2.5G. Four: BE550 v2. One: BE9300 v2.
+- In the stock web UI: Advanced > System > Firmware Update shows
+  "Hardware Version".
+
+TP-Link uses one firmware file for both models
+(`be550v2-be9300v2-up-all-ver...`), but the LAN hardware is different.
+Each OpenWrt image lists only its own model, so the stock web UI rejects
+the image of the other model.
+
+Regions that the web UI image accepts. This is the list in the stock
+firmware 1.3.3; no region was tested:
+
+| Model | Regions (code in the stock support list) |
+|---|---|
+| Archer BE550 v2.0 | US, EU, CA, AU, JP, KR, SG, AS |
+| Archer BE550 v2.6, v2.26 | US |
+| Archer BE9300 v2.0 | US |
+
+If the stock web UI refuses the image on your unit, do not force it.
+Open an issue with the model, version and region of the label.
+
+Not supported:
+
+- **Archer BE550 v1** and **Archer BE9300 v1**: a different platform
+  (IPQ9554). See [openwrt/openwrt#25470](https://github.com/openwrt/openwrt/pull/25470).
+- Other TP-Link Wi-Fi 7 models (BE800, BE805, Deco BE series).
+- The **GL.iNet Flint 3**, the device of the base tree: use
+  [perceival/openwrt-flint3](https://github.com/perceival/openwrt-flint3).
+  The Flint 3 profiles are still in this tree but are not maintained here.
 
 ## Hardware
 
@@ -170,7 +201,7 @@ sudo apt install build-essential clang flex bison g++ gawk gcc-multilib \
 them out there.)
 
 ```sh
-git clone <this repository> openwrt-be550v2
+git clone https://github.com/sopanatx/openwrt-be550v2.git
 cd openwrt-be550v2
 ./scripts/feeds update -a
 ./scripts/feeds install -a
@@ -285,7 +316,9 @@ The most useful things, in this order:
 4. Which LAN jack is which interface (`lan1`..`lan4`), and whether the
    LED commands above work.
 
-Use the "Hardware test report" issue form. Remove MAC addresses, serial
+Use the
+[Hardware test report](https://github.com/sopanatx/openwrt-be550v2/issues/new?template=hardware-report.yml)
+issue form. Remove MAC addresses, serial
 numbers and Wi-Fi keys from logs first.
 
 ## Related work
