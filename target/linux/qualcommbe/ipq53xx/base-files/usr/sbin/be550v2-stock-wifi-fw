@@ -1,27 +1,35 @@
 #!/bin/sh
-# Archer BE550 v2: use the IPQ5332 (2.4 GHz) Q6 firmware from the stock
-# TP-Link firmware instead of the one shipped with OpenWrt.
+# Archer BE550 v2: use the Wi-Fi firmware from the stock TP-Link firmware
+# instead of the one shipped with OpenWrt.
 #
-# The stock Q6 images carry a TP-Link certificate chain. If this SoC only
-# accepts TP-Link-signed Q6 firmware, the upstream ath12k-firmware-ipq5332
-# files fail to load and the 2.4 GHz radio stays down.
+# Two firmwares are involved:
+#   q6   IPQ5332 Q6 (2.4 GHz). The stock images carry a TP-Link certificate
+#        chain. If the SoC only accepts those, the upstream
+#        ath12k-firmware-ipq5332 files fail to load.
+#   qcn  QCN9274/QCN6274 (5 + 6 GHz, PCIe). The stock images are signed
+#        with Qualcomm's production root, the upstream ones with the test
+#        root. A chip with secure boot enabled rejects the upstream image
+#        at BHI ("mhi: Image transfer failed", ERROR_CODE 0xef0a0002), as
+#        seen on the Archer BE550 v1 and BE800.
 #
-#   save     copy the stock files from the other NAND slot to
-#            /etc/be550v2/stock-q6 (kept across sysupgrade, not active).
-#            Runs once on first boot.
-#   install  put the stock files in /lib/firmware so ath12k uses them.
-#            Source: the other slot if it still holds stock, else the
-#            saved copy.
-#   remove   go back to the firmware shipped with OpenWrt.
+#   save            copy the stock files from the other NAND slot to
+#                   /etc/be550v2 (kept across sysupgrade, not active).
+#                   Runs once on first boot.
+#   install [what]  make ath12k use the stock files. Source: the saved
+#                   copy, else the other slot if it still holds stock.
+#   remove [what]   go back to the firmware shipped with OpenWrt.
+#   status          show what is saved and what is active.
+#
+# what = all (default) | q6 | qcn
 #
 # Nothing is written to the stock slot.
-#
-# usage: be550v2-stock-wifi-fw [save|install|remove]
 
 . /lib/functions.sh
 
-DEST=/lib/firmware/ath12k/IPQ5332/hw1.0
-SAVED=/etc/be550v2/stock-q6
+Q6_DEST=/lib/firmware/ath12k/IPQ5332/hw1.0
+Q6_SAVED=/etc/be550v2/stock-q6
+QCN_DEST=/lib/firmware/ath12k/QCN9274/hw2.0/firmware-2.bin
+QCN_SAVED=/etc/be550v2/stock-qcn/firmware-2.bin
 MNT=/tmp/stock-rootfs
 SRC_DIR=lib/firmware/IPQ5332/WIFI_FW
 
@@ -42,13 +50,11 @@ cleanup() {
 	UBI_ATTACHED=
 }
 
-# mount the stock rootfs of the slot we did not boot from; 1 if not stock
-mount_stock() {
-	local other=rootfs mtd ubi vol
+# mount the stock rootfs of slot $1; 1 if it does not hold stock
+mount_slot() {
+	local mtd ubi vol
 
-	grep -q 'ubi.mtd=rootfs_1' /proc/cmdline || other=rootfs_1
-
-	mtd=$(find_mtd_index "$other")
+	mtd=$(find_mtd_index "$1")
 	[ -n "$mtd" ] || return 1
 
 	ubi=$(ubiattach -m "$mtd" 2>/dev/null | sed -n 's/.*device number \([0-9]*\).*/\1/p')
@@ -67,8 +73,25 @@ mount_stock() {
 	[ -f "$MNT/$SRC_DIR/q6_fw0.mdt" ] || { cleanup; return 1; }
 }
 
+# mount the stock rootfs: the slot we did not boot from, or either slot
+# when running from RAM (initramfs)
+mount_stock() {
+	local slots="rootfs rootfs_1" s
+
+	grep -q " $MNT " /proc/mounts && return 0
+	if grep -q 'ubi.mtd=rootfs_1' /proc/cmdline; then
+		slots=rootfs
+	elif grep -q 'ubi.mtd=rootfs' /proc/cmdline; then
+		slots=rootfs_1
+	fi
+	for s in $slots; do
+		mount_slot "$s" && return 0
+	done
+	return 1
+}
+
 # copy the Q6 files from directory $1 to directory $2
-copy_fw() {
+copy_q6() {
 	local f
 
 	mkdir -p "$2"
@@ -79,40 +102,146 @@ copy_fw() {
 	done
 }
 
+# 32-bit little endian
+le32() {
+	printf "\\$(printf %03o $(($1 & 255)))\\$(printf %03o $(($1 >> 8 & 255)))\\$(printf %03o $(($1 >> 16 & 255)))\\$(printf %03o $(($1 >> 24 & 255)))"
+}
+
+# one element of an ath12k firmware-2.bin: id, length, data, padding to 4
+fw_ie() {
+	local len pad
+
+	len=$(wc -c < "$2") || return 1
+	le32 "$1"
+	le32 "$len"
+	cat "$2" || return 1
+	pad=$(( (4 - len % 4) % 4 ))
+	while [ "$pad" -gt 0 ]; do
+		printf '\000'
+		pad=$((pad - 1))
+	done
+}
+
+# Pack the stock QCN9224 images of directory $1 into the container ath12k
+# loads (firmware-2.bin), written to $2.
+#  - features = 0x03: MULTI_QRTR_ID + MLO, as in the upstream file. Without
+#    it the chip never leaves SBL.
+#  - stock ships only the dual-MAC image (one chip serves 5 and 6 GHz). It
+#    goes into both the AMSS and the AMSS_DUALMAC element, so ath12k loads
+#    it whichever one it picks.
+pack_qcn() {
+	local src="$1" out="$2" amss feat
+
+	amss="$src/amss_dualmac.bin"
+	[ -f "$amss" ] || amss="$src/amss.bin"
+	[ -f "$amss" ] && [ -f "$src/m3.bin" ] || return 1
+
+	feat=$(mktemp) || return 1
+	printf '\003' > "$feat"
+	mkdir -p "${out%/*}"
+	{
+		printf 'QCOM-ATH12K-FW\000\000' &&
+		fw_ie 3 "$src/m3.bin" &&
+		fw_ie 2 "$amss" &&
+		fw_ie 4 "$amss" &&
+		fw_ie 1 "$feat"
+	} > "$out.tmp" || { rm -f "$feat" "$out.tmp"; return 1; }
+	rm -f "$feat"
+	mv "$out.tmp" "$out"
+}
+
+save_q6() {
+	[ -f "$Q6_SAVED/q6_fw0.mdt" ] && return 0
+	mount_stock || return 1
+	copy_q6 "$MNT/$SRC_DIR" "$Q6_SAVED.tmp" || { rm -rf "$Q6_SAVED.tmp"; return 1; }
+	rm -rf "$Q6_SAVED"
+	mv "$Q6_SAVED.tmp" "$Q6_SAVED"
+}
+
+save_qcn() {
+	[ -f "$QCN_SAVED" ] && return 0
+	mount_stock || return 1
+	pack_qcn "$MNT/$SRC_DIR/qcn9224" "$QCN_SAVED"
+}
+
+install_q6() {
+	save_q6 || { echo "no stock Q6 firmware: nothing saved and the other slot is not stock" >&2; return 1; }
+	cat "$Q6_SAVED/fw_version.txt" 2>/dev/null
+	copy_q6 "$Q6_SAVED" "$Q6_DEST" || return 1
+	rm -f "$Q6_DEST/fw_version.txt"
+	touch "$Q6_DEST/.stock"
+	echo "Stock IPQ5332 Q6 firmware installed in $Q6_DEST."
+}
+
+# The saved file is 8 MB: link to it instead of a second copy.
+install_qcn() {
+	save_qcn || { echo "no stock QCN9274 firmware: nothing saved and the other slot is not stock" >&2; return 1; }
+	rm -f "$QCN_DEST"
+	ln -s "$QCN_SAVED" "$QCN_DEST" || return 1
+	echo "Stock QCN9274 firmware active ($QCN_DEST -> $QCN_SAVED)."
+}
+
+restore() {
+	rm -f "$1"
+	[ -e "/rom$1" ] && cp -a "/rom$1" "$1"
+}
+
+# Only when the stock files are in place. From RAM (no /rom) the files of
+# OpenWrt cannot come back: reboot for that.
+remove_q6() {
+	local f
+
+	[ -e "$Q6_DEST/.stock" ] || return 0
+	[ -d /rom/lib ] || { echo "running from RAM: reboot to get the OpenWrt Q6 firmware back" >&2; return 1; }
+	for f in "$Q6_DEST"/q6_fw0.* "$Q6_DEST"/q6_fw1.* "$Q6_DEST"/iu_fw.*; do
+		[ -e "$f" ] && restore "$f"
+	done
+	rm -f "$Q6_DEST/.stock"
+}
+
+remove_qcn() {
+	[ -L "$QCN_DEST" ] || return 0
+	[ -d /rom/lib ] || { echo "running from RAM: reboot to get the OpenWrt QCN9274 firmware back" >&2; return 1; }
+	restore "$QCN_DEST"
+}
+
 be550v2_board || die "not an Archer BE550 v2"
+
+what=${2:-all}
+case "$what" in all|q6|qcn) ;; *) die "usage: $0 [save|install|remove|status] [all|q6|qcn]" ;; esac
 
 case "${1:-install}" in
 save)
-	[ -f "$SAVED/q6_fw0.mdt" ] && { echo "Already saved in $SAVED."; exit 0; }
-	mount_stock || die "the other slot does not hold the stock firmware"
-	copy_fw "$MNT/$SRC_DIR" "$SAVED.tmp" || { rm -rf "$SAVED.tmp"; die "copy failed"; }
-	rm -rf "$SAVED"
-	mv "$SAVED.tmp" "$SAVED"
+	rc=0
+	save_q6 || rc=1
+	save_qcn || rc=1
 	cleanup
-	echo "Stock IPQ5332 Q6 firmware saved in $SAVED."
+	[ "$rc" = 0 ] || die "the other slot does not hold the stock firmware"
+	echo "Stock Wi-Fi firmware saved in /etc/be550v2."
 	;;
 install)
-	if mount_stock; then
-		src="$MNT/$SRC_DIR"
-	elif [ -f "$SAVED/q6_fw0.mdt" ]; then
-		src="$SAVED"
-	else
-		die "no stock Q6 firmware: the other slot is not stock and nothing is saved in $SAVED"
-	fi
-	cat "$src/fw_version.txt" 2>/dev/null
-	copy_fw "$src" "$DEST" || die "copy to $DEST failed"
-	rm -f "$DEST/fw_version.txt"
+	rc=0
+	[ "$what" = qcn ] || install_q6 || rc=1
+	[ "$what" = q6 ] || install_qcn || rc=1
 	cleanup
-	echo "Stock IPQ5332 Q6 firmware installed in $DEST. Reboot to use it."
-	echo "Undo with: $0 remove"
+	[ "$rc" = 0 ] || die "install failed"
+	echo "Reboot to use it. Undo with: $0 remove"
 	;;
 remove)
-	for f in "$DEST"/q6_fw0.* "$DEST"/q6_fw1.* "$DEST"/iu_fw.*; do
-		[ -e "/rom$f" ] && cp -a "/rom$f" "$f" || rm -f "$f"
-	done
+	rc=0
+	[ "$what" = qcn ] || remove_q6 || rc=1
+	[ "$what" = q6 ] || remove_qcn || rc=1
+	[ "$rc" = 0 ] || exit 1
 	echo "Restored the firmware shipped with OpenWrt. Reboot to use it."
 	;;
+status)
+	[ -f "$Q6_SAVED/q6_fw0.mdt" ] && echo "q6:  saved" || echo "q6:  not saved"
+	[ -f "$QCN_SAVED" ] && echo "qcn: saved" || echo "qcn: not saved"
+	[ -e "$Q6_DEST/.stock" ] && echo "q6:  stock firmware active" || echo "q6:  OpenWrt firmware active"
+	[ -L "$QCN_DEST" ] && echo "qcn: stock firmware active" || echo "qcn: OpenWrt firmware active"
+	cat /etc/be550v2/wifi-fw-state 2>/dev/null
+	;;
 *)
-	die "usage: $0 [save|install|remove]"
+	die "usage: $0 [save|install|remove|status] [all|q6|qcn]"
 	;;
 esac

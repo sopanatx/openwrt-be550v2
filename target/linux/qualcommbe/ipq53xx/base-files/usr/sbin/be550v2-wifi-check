@@ -1,27 +1,33 @@
 #!/bin/sh
-# Archer BE550 v2: make sure Wi-Fi comes up, whichever Q6 firmware the SoC
-# accepts.
+# Archer BE550 v2: make sure Wi-Fi comes up, whichever firmware the chips
+# accept.
 #
 # The 2.4 GHz radio is the IPQ5332 itself; its Q6 firmware is authenticated
-# by TrustZone. The three radios are WSI-linked (one ath12k hardware group
-# for MLO), so when the Q6 does not start, 5 GHz and 6 GHz stay down too
-# and no wiphy is registered at all.
+# by TrustZone. The 5 and 6 GHz radios are one QCN9274-family chip on PCIe
+# that authenticates its own firmware. The three radios are WSI-linked (one
+# ath12k hardware group for MLO), so when one of them does not start, no
+# wiphy is registered at all.
 #
-# Run once per boot:
-#   wiphy present                      -> record which firmware works
-#   no wiphy, upstream firmware active -> switch to the unit's own stock Q6
-#                                         firmware (TP-Link signed) and
-#                                         reboot, once
-#   no wiphy, stock firmware active    -> go back to upstream, stop trying
+# Run once per boot. With a wiphy present, record which firmware set works.
+# Without one, switch to the next set and reboot:
 #
-# State: /etc/be550v2/wifi-fw-state (upstream-ok | stock-tried | stock-ok |
-# failed). Delete the file to start over. "failed" keeps a kernel log in
-# /etc/be550v2/wifi-fail.log.
+#   upstream    firmware shipped with OpenWrt
+#   stock-qcn   stock 5/6 GHz firmware, OpenWrt Q6 firmware (what the
+#               Archer BE550 v1 needs)
+#   stock-all   stock firmware for both
+#   stock-q6    stock Q6 firmware, OpenWrt 5/6 GHz firmware
+#
+# After the last set: back to upstream, stop trying. At most three reboots.
+#
+# State: /etc/be550v2/wifi-fw-state = "<set>-ok", "<set>-tried" or
+# "failed". Delete the file to start over. Each failed set appends its
+# kernel log to /etc/be550v2/wifi-fail.log.
 
 . /lib/functions.sh
 
 DIR=/etc/be550v2
 STATE=$DIR/wifi-fw-state
+FW=/usr/sbin/be550v2-stock-wifi-fw
 WAIT=${1:-180}
 
 be550v2_board() {
@@ -33,10 +39,35 @@ be550v2_board() {
 
 log() { logger -t be550v2-wifi "$*"; echo "$*"; }
 
+# set that follows $1
+next_set() {
+	case "$1" in
+	upstream) echo stock-qcn ;;
+	stock-qcn) echo stock-all ;;
+	stock-all) echo stock-q6 ;;
+	esac
+}
+
+# make set $1 the active one
+use_set() {
+	$FW remove all >/dev/null 2>&1
+	case "$1" in
+	stock-qcn) $FW install qcn ;;
+	stock-all) $FW install all ;;
+	stock-q6) $FW install q6 ;;
+	esac >/dev/null 2>&1
+}
+
 be550v2_board || exit 0
 
 mkdir -p "$DIR"
 state=$(cat "$STATE" 2>/dev/null)
+case "$state" in
+failed) cur=failed ;;
+*-tried) cur=${state%-tried} ;;
+*-ok) cur=${state%-ok} ;;
+*) cur=upstream ;;
+esac
 
 have_wiphy() { ls /sys/class/ieee80211/ 2>/dev/null | grep -q .; }
 
@@ -47,34 +78,44 @@ while ! have_wiphy && [ "$t" -lt "$WAIT" ]; do
 done
 
 if have_wiphy; then
-	case "$state" in
-	stock-tried) echo stock-ok > "$STATE"; log "Wi-Fi up with the stock Q6 firmware" ;;
-	"") echo upstream-ok > "$STATE" ;;
-	esac
+	if [ "$cur" != failed ] && [ "$state" != "$cur-ok" ]; then
+		echo "$cur-ok" > "$STATE"
+		log "Wi-Fi up with firmware set: $cur"
+	fi
 	exit 0
 fi
 
-case "$state" in
-""|upstream-ok)
-	if /usr/sbin/be550v2-stock-wifi-fw install >/dev/null 2>&1; then
-		echo stock-tried > "$STATE"
-		log "no Wi-Fi device after ${WAIT}s: switching to the stock Q6 firmware and rebooting"
+# From RAM (initramfs) a reboot returns to the firmware in flash and the
+# state is lost: do not reboot, tell how to try by hand.
+if [ ! -d /rom/lib ]; then
+	log "no Wi-Fi device after ${WAIT}s. Running from RAM, no automatic fallback. Try: be550v2-stock-wifi-fw install qcn, then reload the ath12k modules"
+	exit 0
+fi
+
+if [ "$cur" = failed ]; then
+	log "no Wi-Fi device (firmware fallback already tried); see $DIR/wifi-fail.log"
+	exit 0
+fi
+
+{
+	echo "=== firmware set: $cur"
+	dmesg | grep -iE 'ath12k|remoteproc|q6v5|qcom_scm|mhi'
+} >> "$DIR/wifi-fail.log"
+
+next=$(next_set "$cur")
+while [ -n "$next" ]; do
+	if use_set "$next"; then
+		echo "$next-tried" > "$STATE"
+		log "no Wi-Fi device after ${WAIT}s with firmware set $cur: trying $next, rebooting"
 		sync
 		reboot
-	else
-		echo failed > "$STATE"
-		dmesg | grep -iE 'ath12k|remoteproc|q6v5|qcom_scm|mhi' > "$DIR/wifi-fail.log"
-		log "no Wi-Fi device and no stock Q6 firmware to fall back to; see $DIR/wifi-fail.log"
+		exit 0
 	fi
-	;;
-stock-tried|stock-ok)
-	dmesg | grep -iE 'ath12k|remoteproc|q6v5|qcom_scm|mhi' > "$DIR/wifi-fail.log"
-	/usr/sbin/be550v2-stock-wifi-fw remove >/dev/null 2>&1
-	echo failed > "$STATE"
-	log "no Wi-Fi device with the stock Q6 firmware either; upstream firmware restored, see $DIR/wifi-fail.log"
-	;;
-failed)
-	log "no Wi-Fi device (firmware fallback already tried); see $DIR/wifi-fail.log"
-	;;
-esac
+	log "firmware set $next not available (no stock firmware saved)"
+	next=$(next_set "$next")
+done
+
+$FW remove all >/dev/null 2>&1
+echo failed > "$STATE"
+log "no Wi-Fi device with any firmware set; OpenWrt firmware restored, see $DIR/wifi-fail.log"
 exit 0

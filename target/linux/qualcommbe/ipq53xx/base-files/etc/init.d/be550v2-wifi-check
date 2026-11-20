@@ -1,5 +1,5 @@
 #!/bin/sh /etc/rc.common
-# Archer BE550 v2: Q6 firmware fallback, see /usr/sbin/be550v2-wifi-check
+# Archer BE550 v2: Wi-Fi firmware fallback, see /usr/sbin/be550v2-wifi-check
 
 START=99
 

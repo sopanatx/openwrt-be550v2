@@ -1,7 +1,7 @@
 #!/bin/sh
 # First boot after a web-UI install: the other NAND slot still holds the
-# stock firmware. Keep a copy of its TP-Link-signed IPQ5332 Q6 firmware in
-# /etc/be550v2/stock-q6 so "be550v2-stock-wifi-fw install" still works
+# stock firmware. Keep a copy of its Wi-Fi firmware (IPQ5332 Q6 and
+# QCN9274) in /etc/be550v2 so "be550v2-stock-wifi-fw install" still works
 # after sysupgrade has overwritten that slot. The copy is not activated.
 . /lib/functions.sh
 
