@@ -24,9 +24,16 @@ DIR=/etc/be550v2
 STATE=$DIR/wifi-fw-state
 WAIT=${1:-180}
 
+be550v2_board() {
+	case "$(board_name)" in
+	tplink,archer-be550-v2|tplink,archer-be9300-v2) return 0 ;;
+	esac
+	return 1
+}
+
 log() { logger -t be550v2-wifi "$*"; echo "$*"; }
 
-[ "$(board_name)" = "tplink,archer-be550-v2" ] || exit 0
+be550v2_board || exit 0
 
 mkdir -p "$DIR"
 state=$(cat "$STATE" 2>/dev/null)

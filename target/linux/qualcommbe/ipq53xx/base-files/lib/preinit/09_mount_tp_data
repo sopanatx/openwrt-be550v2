@@ -10,7 +10,8 @@
 
 preinit_mount_tp_data() {
 	case "$(board_name)" in
-	tplink,archer-be550-v2)
+	tplink,archer-be550-v2|\
+	tplink,archer-be9300-v2)
 		;;
 	*)
 		return

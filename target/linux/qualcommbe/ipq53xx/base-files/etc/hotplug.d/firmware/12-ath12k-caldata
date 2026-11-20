@@ -13,7 +13,8 @@ case "$FIRMWARE" in
 	gl.inet,gl-be9300)
 		caldata_extract_mmc "0:ART" 0x1000 0x20000
 		;;
-	tplink,archer-be550-v2)
+	tplink,archer-be550-v2|\
+	tplink,archer-be9300-v2)
 		caldata_extract "0:art" 0x1000 0x20000
 		;;
 	esac
@@ -28,7 +29,8 @@ case "$FIRMWARE" in
 		# against the ART partition dump from a live unit)
 		caldata_extract_mmc "0:ART" 0x58800 0x27800
 		;;
-	tplink,archer-be550-v2)
+	tplink,archer-be550-v2|\
+	tplink,archer-be9300-v2)
 		# same reference design and dual-MAC QCN9224 as the GL-BE9300
 		caldata_extract "0:art" 0x58800 0x27800
 		;;

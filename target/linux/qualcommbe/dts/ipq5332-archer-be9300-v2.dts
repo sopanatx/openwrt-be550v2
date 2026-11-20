@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR BSD-3-Clause)
+/*
+ * TP-Link Archer BE9300 v2
+ *
+ * Same board as the Archer BE550 v2 except for the LAN side:
+ *  - Realtek rtl8367d-family switch (chip ID 0x6642) at MDIO address 29
+ *    instead of the RTL8372N; its two SerDes ports run HSGMII:
+ *    port 17 to the IPQ5332 (stock switch_mac_mode1 0x0c, forced 2500),
+ *    port 16 to a second RTL8221B (MDIO address 6) = LAN1, 2.5G.
+ *    LAN2-4 are the switch's 1G ports 0-2.
+ *  - third PHY reset GPIO 43 (LAN1 PHY; GPIO 39 is the WAN PHY).
+ *
+ * Source: stock 1.3.3 device tree "config@BE9300_2_0_0", stock
+ * default-config section BE9300_2_0_0 and the stock qca-ssdk.
+ *
+ * No Linux driver handles this switch, so there is no DSA here:
+ * kmod-be9300v2-switch replays the stock setup and the switch runs
+ * unmanaged behind the "lan" interface.
+ */
+
+#include "ipq5332-archer-be550-v2.dts"
+
+/ {
+	model = "TP-Link Archer BE9300 v2";
+	compatible = "tplink,archer-be9300-v2", "qcom,ipq5332";
+};
+
+/delete-node/ &rtl837x;
+
+&mdio {
+	switch@1d {
+		compatible = "tplink,archer-be9300-v2-switch";
+		reg = <29>;
+		tplink,lan1-phy-addr = <6>;
+	};
+};
+
+&tlmm {
+	/*
+	 * LAN1 PHY reset, active low. Stock ends its reset pulse with the
+	 * line high; hold it there.
+	 */
+	lan1-phy-reset-hog {
+		gpio-hog;
+		gpios = <43 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "lan1-phy-reset";
+	};
+};
+
+/* uniphy1, stock switch_mac_mode1 0x0c (SGMII+), forced 2500 full */
+&xgmac2 {
+	phy-mode = "2500base-x";
+
+	/delete-node/ fixed-link;
+
+	fixed-link {
+		speed = <2500>;
+		full-duplex;
+		pause;
+	};
+};

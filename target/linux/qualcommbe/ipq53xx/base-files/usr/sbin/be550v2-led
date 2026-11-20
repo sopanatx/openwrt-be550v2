@@ -24,6 +24,13 @@ loop:0xcb static:0xcc"
 STATUS="off:160 reboot:161 internet-up:162 internet-down:163 \
 internet-wifi-down:164 wifi-down:165 upgrade:166 reset:167 wps:168"
 
+be550v2_board() {
+	case "$(board_name)" in
+	tplink,archer-be550-v2|tplink,archer-be9300-v2) return 0 ;;
+	esac
+	return 1
+}
+
 die() { echo "$*" >&2; exit 1; }
 
 find_bus() {
@@ -81,7 +88,7 @@ effect() {
 	send $code $c1 $c2 0 0 0 $(( crc >> 8 )) $(( crc & 0xff ))
 }
 
-[ "$(board_name)" = "tplink,archer-be550-v2" ] || die "not an Archer BE550 v2"
+be550v2_board || die "not an Archer BE550 v2"
 
 case "$1" in
 on)	effect static "${2:-ffffff}" ;;

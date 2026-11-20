@@ -1,0 +1,36 @@
+#!/bin/sh
+# Archer BE9300 v2: way back in when the LAN switch does not pass traffic.
+#
+# The switch setup of this board is a replay of the stock register writes
+# and was never tried on hardware. If it does not work, the four LAN jacks
+# are dead and the router cannot be reached. The WAN jack has its own PHY
+# and does not depend on the switch.
+#
+# 3 minutes after boot: if not one frame arrived on "lan" and the WAN side
+# got no IPv4 address, put the WAN port into br-lan until the next reboot.
+# Then a PC on the WAN jack gets 192.168.1.x and can reach the router.
+# Nothing is written to the configuration.
+
+. /lib/functions.sh
+. /lib/functions/network.sh
+
+[ "$(board_name)" = "tplink,archer-be9300-v2" ] || exit 0
+
+log() { logger -t be9300v2-lan-rescue "$*"; }
+
+sleep 180
+
+rx=$(cat /sys/class/net/lan/statistics/rx_packets 2>/dev/null)
+[ "${rx:-0}" -eq 0 ] || exit 0
+
+network_flush_cache
+network_get_ipaddr ip wan
+[ -z "$ip" ] || exit 0
+
+[ -d /sys/class/net/br-lan ] && [ -d /sys/class/net/wan ] || exit 0
+
+log "no frame on lan and no WAN address: WAN port joins br-lan until reboot"
+ifdown wan 2>/dev/null
+ifdown wan6 2>/dev/null
+sleep 1
+ip link set dev wan master br-lan && ip link set dev wan up

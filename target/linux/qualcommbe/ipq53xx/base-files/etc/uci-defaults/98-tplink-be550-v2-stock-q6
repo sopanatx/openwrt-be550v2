@@ -5,7 +5,7 @@
 # after sysupgrade has overwritten that slot. The copy is not activated.
 . /lib/functions.sh
 
-[ "$(board_name)" = "tplink,archer-be550-v2" ] || exit 0
+case "$(board_name)" in tplink,archer-be550-v2|tplink,archer-be9300-v2) true ;; *) false ;; esac || exit 0
 
 /usr/sbin/be550v2-stock-wifi-fw save >/dev/null 2>&1
 exit 0

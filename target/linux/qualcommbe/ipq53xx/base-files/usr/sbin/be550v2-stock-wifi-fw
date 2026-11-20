@@ -25,6 +25,13 @@ SAVED=/etc/be550v2/stock-q6
 MNT=/tmp/stock-rootfs
 SRC_DIR=lib/firmware/IPQ5332/WIFI_FW
 
+be550v2_board() {
+	case "$(board_name)" in
+	tplink,archer-be550-v2|tplink,archer-be9300-v2) return 0 ;;
+	esac
+	return 1
+}
+
 die() { echo "$*" >&2; cleanup; exit 1; }
 
 cleanup() {
@@ -72,7 +79,7 @@ copy_fw() {
 	done
 }
 
-[ "$(board_name)" = "tplink,archer-be550-v2" ] || die "not an Archer BE550 v2"
+be550v2_board || die "not an Archer BE550 v2"
 
 case "${1:-install}" in
 save)

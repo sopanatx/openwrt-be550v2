@@ -108,7 +108,8 @@ platform_do_upgrade() {
 		CI_KERNPART="kernel0"
 		fit_do_upgrade "$1"
 		;;
-	tplink,archer-be550-v2)
+	tplink,archer-be550-v2|\
+	tplink,archer-be9300-v2)
 		tplink_be550_v2_do_upgrade "$1"
 		;;
 	*)
@@ -123,7 +124,8 @@ platform_check_image() {
 
 	case "$(board_name)" in
 	gl.inet,gl-be6500|\
-	tplink,archer-be550-v2)
+	tplink,archer-be550-v2|\
+	tplink,archer-be9300-v2)
 		return 0
 		;;
 	gl.inet,gl-be9300)

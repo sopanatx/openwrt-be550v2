@@ -170,3 +170,18 @@ define Device/tplink_archer-be550-v2
 		kmod-usb-dwc3-qcom kmod-usb-xhci-hcd
 endef
 TARGET_DEVICES += tplink_archer-be550-v2
+
+# Same board with another LAN side: a Realtek rtl8367d-family switch (chip
+# ID 0x6642) on a 2.5G HSGMII link plus a second RTL8221B for LAN1. No DSA
+# driver exists for it; kmod-be9300v2-switch replays the stock setup and
+# the switch runs unmanaged.
+define Device/tplink_archer-be9300-v2
+	$(call Device/tplink_archer-be550-v2)
+	DEVICE_MODEL := Archer BE9300
+	TPLINK_FIT_CONFIGS := config@BE9300_2_0_0 config@mi01.6 config-1
+	TPLINK_SUPPORT_STRING := SupportList:\n\
+		{product_name:Archer BE9300,product_ver:2.0.0,special_id:55530000}\n
+	DEVICE_PACKAGES := $$(filter-out kmod-rtl837x-dsa,$$(DEVICE_PACKAGES)) \
+		kmod-be9300v2-switch
+endef
+TARGET_DEVICES += tplink_archer-be9300-v2

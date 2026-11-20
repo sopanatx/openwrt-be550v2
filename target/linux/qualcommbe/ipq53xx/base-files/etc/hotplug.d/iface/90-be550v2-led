@@ -2,7 +2,7 @@
 
 . /lib/functions.sh
 
-[ "$(board_name)" = "tplink,archer-be550-v2" ] || exit 0
+case "$(board_name)" in tplink,archer-be550-v2|tplink,archer-be9300-v2) true ;; *) false ;; esac || exit 0
 [ "$INTERFACE" = "wan" ] || exit 0
 
 case "$ACTION" in

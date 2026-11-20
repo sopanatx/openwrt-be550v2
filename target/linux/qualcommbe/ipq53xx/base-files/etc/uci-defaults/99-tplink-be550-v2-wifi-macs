@@ -7,7 +7,7 @@
 . /lib/functions.sh
 . /lib/functions/system.sh
 
-[ "$(board_name)" = "tplink,archer-be550-v2" ] || exit 0
+case "$(board_name)" in tplink,archer-be550-v2|tplink,archer-be9300-v2) true ;; *) false ;; esac || exit 0
 
 base=$(get_mac_binary "/tmp/tp_data/default-mac" 0)
 [ -n "$base" ] || exit 0

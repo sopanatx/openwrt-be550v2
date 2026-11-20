@@ -30,8 +30,14 @@ ipq53xx_setup_interfaces()
 	gl.inet,gl-be9300)
 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "wan"
 		;;
-	tplink,archer-be550-v2)
-		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "wan"
+	tplink,archer-be550-v2|\
+	tplink,archer-be9300-v2)
+		if [ "$board" = "tplink,archer-be9300-v2" ]; then
+			# unmanaged switch behind one interface
+			ucidef_set_interfaces_lan_wan "lan" "wan"
+		else
+			ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "wan"
+		fi
 		# factory MAC: 6 raw bytes in tp_data/default-mac, mounted
 		# read-only in preinit (lib/preinit/09_mount_tp_data)
 		lan_mac=$(get_mac_binary "/tmp/tp_data/default-mac" 0)
