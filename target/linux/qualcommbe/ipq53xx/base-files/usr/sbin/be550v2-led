@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
 # Archer BE550 v2: drive the front LED through the LED controller MCU.
 #
 # Protocol taken from the stock /usr/bin/led_combination (1.3.3):

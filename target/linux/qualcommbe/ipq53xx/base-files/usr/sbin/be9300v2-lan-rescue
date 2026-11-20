@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
 # Archer BE9300 v2: way back in when the LAN switch does not pass traffic.
 #
 # The switch setup of this board is a replay of the stock register writes

@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
 # Archer BE550 v2: use the Wi-Fi firmware from the stock TP-Link firmware
 # instead of the one shipped with OpenWrt.
 #

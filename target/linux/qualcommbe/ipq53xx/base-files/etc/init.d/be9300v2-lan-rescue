@@ -1,4 +1,5 @@
 #!/bin/sh /etc/rc.common
+# SPDX-License-Identifier: GPL-2.0-only
 # Archer BE9300 v2: see /usr/sbin/be9300v2-lan-rescue
 
 START=99

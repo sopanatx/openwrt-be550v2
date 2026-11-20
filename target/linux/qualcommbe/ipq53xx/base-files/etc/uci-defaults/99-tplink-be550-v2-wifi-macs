@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
 # ath12k takes its MAC from firmware board data, so without this the BSSIDs
 # are not tied to the unit. Pin each AP interface to an address derived from
 # the factory MAC in tp_data/default-mac (as on the BE550 v1: LAN = base,

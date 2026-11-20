@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
 # Archer BE550 v2: make sure Wi-Fi comes up, whichever firmware the chips
 # accept.
 #

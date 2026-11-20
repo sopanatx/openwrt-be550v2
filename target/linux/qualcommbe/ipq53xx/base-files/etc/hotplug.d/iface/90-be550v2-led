@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 # Archer BE550 v2: follow the WAN state on the front LED.
 
 . /lib/functions.sh

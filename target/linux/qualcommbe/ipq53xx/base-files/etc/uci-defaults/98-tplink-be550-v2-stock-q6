@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
 # First boot after a web-UI install: the other NAND slot still holds the
 # stock firmware. Keep a copy of its Wi-Fi firmware (IPQ5332 Q6 and
 # QCN9274) in /etc/be550v2 so "be550v2-stock-wifi-fw install" still works
