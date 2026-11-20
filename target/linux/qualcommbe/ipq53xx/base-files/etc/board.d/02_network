@@ -30,6 +30,20 @@ ipq53xx_setup_interfaces()
 	gl.inet,gl-be9300)
 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "wan"
 		;;
+	tplink,archer-be550-v2)
+		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "wan"
+		# factory MAC: 6 raw bytes in tp_data/default-mac, mounted
+		# read-only in preinit (lib/preinit/09_mount_tp_data)
+		lan_mac=$(get_mac_binary "/tmp/tp_data/default-mac" 0)
+		if [ -n "$lan_mac" ]; then
+			wan_mac=$(macaddr_add "$lan_mac" 1)
+			ucidef_set_network_device_mac "lan" "$lan_mac"
+			ucidef_set_network_device_mac "wan" "$wan_mac"
+			ucidef_set_interface_macaddr "lan" "$lan_mac"
+			ucidef_set_interface_macaddr "wan" "$wan_mac"
+			ucidef_set_label_macaddr "$lan_mac"
+		fi
+		;;
 	*)
 		echo "Unsupported hardware. Network interfaces not initialized"
 		;;

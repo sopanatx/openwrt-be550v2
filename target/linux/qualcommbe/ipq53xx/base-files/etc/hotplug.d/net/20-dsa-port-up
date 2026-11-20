@@ -17,7 +17,8 @@
 . /lib/functions/system.sh
 
 case "$(board_name)" in
-gl.inet,gl-be9300) ;;
+gl.inet,gl-be9300|\
+tplink,archer-be550-v2) ;;
 *) exit 0 ;;
 esac
 

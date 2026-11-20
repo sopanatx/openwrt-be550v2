@@ -148,11 +148,23 @@ def write_image(output_image, header):
         out_file.seek(0)
         out_file.write(struct.pack('>I16s', size, md5_sum.digest()))
 
-def encode_soft_version():
-    '''Not sure of the meaning of version. Also doesn't appear to be needed.'''
+def unescape_newlines(text):
+    '''Turn literal "\\r\\n" / "\\n" sequences (as passed by make) into line breaks'''
+    text = re.sub("\\\\r\\\\n ?", "\r\n", text)
+    return re.sub("\\\\n ?", "\n", text)
+
+def encode_soft_version(text=None):
+    '''Encode the "soft-version" section.
+
+    Older images (BE800 v1, BE550 v1) accept a binary blob. Newer stock
+    images (e.g. BE550 v2) carry text such as "soft_ver:1.3.3 Build ...",
+    and their nvrammanager compares it against the installed version.
+    '''
+    if text:
+        return unescape_newlines(text).encode("utf-8")
     return struct.pack('>4B1I2I', 0xff, 1, 0 ,0, 0x2020202, 30000, 1)
 
-def create_image(output_image, root, support):
+def create_image(output_image, root, support, soft_version=None):
     '''Create an image with a ubi "root" and a "support" string.'''
     header = {}
 
@@ -166,14 +178,14 @@ def create_image(output_image, root, support):
 
     support_list = {}
     support_list['name'] = 'support-list'
-    support_list['data'] = re.sub("\\\\r\\\\n ?", "\r\n", support).encode("utf-8")
+    support_list['data'] = unescape_newlines(support).encode("utf-8")
     support_list['size'] = len(support_list['data'])
     support_list['last'] = 0
     header['items'].append(support_list)
 
     sw_version = {}
     sw_version['name'] = 'soft-version'
-    sw_version['data'] = encode_soft_version()
+    sw_version['data'] = encode_soft_version(soft_version)
     sw_version['size'] = len(sw_version['data'])
     sw_version['last'] = 1
     header['items'].append(sw_version)
@@ -188,7 +200,7 @@ def main(args):
     elif args.create:
         if not args.rootfs or not args.support:
             raise ValueError('To create an image, specify rootfs and support list')
-        create_image(args.image, args.rootfs, args.support)
+        create_image(args.image, args.rootfs, args.support, args.soft_version)
     else:
         with open(args.image, 'rb') as image:
             header = decode_header(image)
@@ -205,6 +217,8 @@ if __name__ == "__main__":
                     help='Name of image to create or decode')
     parser.add_argument('--rootfs', type=str,
                     help='When creating an image, UBI image with rootfs and kernel')
+    parser.add_argument('--soft-version', type=str,
+                    help='Text for the "soft-version" section (default: binary blob)')
     parser.add_argument('--support', type=str,
                     help='String for the "support-list" section')
 

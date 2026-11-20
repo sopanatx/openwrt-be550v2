@@ -1,0 +1,523 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR BSD-3-Clause)
+/*
+ * TP-Link Archer BE550 v2 (also sold as Archer BE9300 v2)
+ *
+ * Qualcomm IPQ5332 (AP-MI01.6 reference design), 512 MiB DDR4, 128 MiB
+ * SPI-NAND, RTL8372N 4x 2.5G switch on a 10GBASE-R link, RTL8221B 2.5G
+ * WAN PHY, IPQ5332 2.4 GHz radio and one dual-MAC QCN9224 (5 + 6 GHz).
+ *
+ * Values in this file come from the stock 1.3.3 device tree
+ * (FIT config "config@BE550_2_0_0") and the stock qca-ssdk RTL8372
+ * init sequence unless noted otherwise.
+ */
+
+/dts-v1/;
+
+#include <arm64/qcom/ipq5332.dtsi>
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/clock/qcom,ipq5332-nsscc.h>
+
+/ {
+	#address-cells = <0x2>;
+	#size-cells = <0x2>;
+	model = "TP-Link Archer BE550 v2";
+	compatible = "tplink,archer-be550-v2", "qcom,ipq5332";
+
+	aliases {
+		serial0 = &blsp1_uart0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+		/*
+		 * TP-Link's U-Boot appends "ubi.mtd=rootfs[_1]
+		 * root=mtd:ubi_rootfs rootfstype=squashfs"; boot the
+		 * OpenWrt "rootfs" volume through ubiblock instead.
+		 */
+		bootargs-append = " root=/dev/ubiblock0_1";
+	};
+
+	/*
+	 * Reserved memory below matches the stock device tree exactly
+	 * (same layout as the GL-BE9300, which uses the same reference
+	 * design).
+	 */
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		tzapp: tzapp@49b00000 {
+			reg = <0x0 0x49b00000 0x0 0x00600000>;
+			no-map;
+		};
+
+		q6_host_ddr: host-ddr@4b500000 {
+			reg = <0x0 0x4b500000 0x0 0x01700000>;
+			no-map;
+		};
+
+		m3_dump: m3-dump@4cc00000 {
+			reg = <0x0 0x4cc00000 0x0 0x100000>;
+			no-map;
+		};
+
+		q6_etr: q6-etr-dump@4cd00000 {
+			reg = <0x0 0x4cd00000 0x0 0x100000>;
+			no-map;
+		};
+
+		q6_caldb: q6-caldb@4ce00000 {
+			reg = <0x0 0x4ce00000 0x0 0x500000>;
+			no-map;
+		};
+
+		/* keep dmesg across a warm reboot, read it from /sys/fs/pstore */
+		ramoops@4da00000 {
+			compatible = "ramoops";
+			reg = <0x0 0x4da00000 0x0 0x100000>;
+			console-size = <0x40000>;
+			record-size = <0x20000>;
+			pmsg-size = <0x20000>;
+		};
+
+		mlo_mem: mlo-global-mem@4db00000 {
+			reg = <0x0 0x4db00000 0x0 0x01200000>;
+			no-map;
+		};
+
+		qcn9274_host_ddr: qcn9274-host-ddr@4ed00000 {
+			reg = <0x0 0x4ed00000 0x0 0x03200000>;
+			no-map;
+		};
+	};
+
+	/* USB VBUS, stock "usb_enabled" gpio-led on GPIO 50 */
+	usb_vbus_5v: regulator-usb-vbus {
+		compatible = "regulator-fixed";
+		regulator-name = "usb_vbus_5v";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		gpio = <&tlmm 50 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	keys {
+		compatible = "gpio-keys";
+		pinctrl-0 = <&button_pins>;
+		pinctrl-names = "default";
+
+		reset {
+			label = "reset";
+			linux,code = <KEY_RESTART>;
+			gpios = <&tlmm 29 GPIO_ACTIVE_LOW>;
+			debounce-interval = <60>;
+		};
+
+		wps {
+			label = "wps";
+			linux,code = <KEY_WPS_BUTTON>;
+			gpios = <&tlmm 35 GPIO_ACTIVE_LOW>;
+			debounce-interval = <60>;
+		};
+
+		wifi {
+			label = "wifi";
+			linux,code = <KEY_RFKILL>;
+			gpios = <&tlmm 36 GPIO_ACTIVE_LOW>;
+			debounce-interval = <60>;
+		};
+
+		led {
+			label = "led";
+			linux,code = <KEY_LIGHTS_TOGGLE>;
+			gpios = <&tlmm 24 GPIO_ACTIVE_LOW>;
+			debounce-interval = <60>;
+		};
+	};
+};
+
+&blsp1_uart0 {
+	pinctrl-0 = <&serial_0_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&tlmm {
+	button_pins: button-state {
+		pins = "gpio24", "gpio29", "gpio35", "gpio36";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
+	};
+
+	qspi_nand_pins: qspi-nand-state {
+		clock-pins {
+			pins = "gpio13";
+			function = "qspi_clk";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+
+		cs-pins {
+			pins = "gpio12";
+			function = "qspi_cs";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+
+		data-pins {
+			pins = "gpio8", "gpio9", "gpio10", "gpio11";
+			function = "qspi_data";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+	};
+
+	/* stock pci1-pinmux: only PERST# is muxed */
+	pcie1_default: pcie1-default-state {
+		perst-n-pins {
+			pins = "gpio47";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-up;
+			output-low;
+		};
+	};
+};
+
+/* mdio1_pins (GPIO 27/28) comes from ipq5332.dtsi and matches stock */
+&mdio {
+	status = "okay";
+	pinctrl-0 = <&mdio1_pins>;
+	pinctrl-names = "default";
+	mdio_clk_fixup;
+
+	/*
+	 * Stock lists two PHY reset GPIOs (30 and 39) without saying which
+	 * chip each one resets. Both chips come out of TP-Link's U-Boot
+	 * already running, so neither GPIO is driven here: a wrong guess
+	 * would hold the switch or the PHY in reset.
+	 */
+
+	/* RTL8221B 2.5G WAN PHY, stock port_phyinfo port 1 / dp2 */
+	wan_phy: ethernet-phy@7 {
+		compatible = "ethernet-phy-ieee802.3-c45";
+		reg = <7>;
+	};
+
+	/*
+	 * RTL8372N switch, stock port_phyinfo port 2 / dp1
+	 * ("TP_EXT_SWITCH_RTL8372", xfi-mode, forced 10G).
+	 *
+	 * Stock qca-ssdk rtl8372n_init() sets the RX PN swap on both
+	 * SerDes (page 0 reg 0 bit 9, page 6 reg 2 bit 13), but no TX
+	 * swap, then writes 0xa90 <- 0xc (MDI reverse) and
+	 * 0xa94 <- 0x596a (PHY TX polarity swap). After that it sets
+	 * SDS0 to 10GBASE-R with N-way off, CPU port 3.
+	 */
+	rtl837x: rtl837x-dsa@29 {
+		compatible = "realtek,rtl837x";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <29>;
+		rtl837x,sds0mode = "10g-kr";
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		sds0-rx-swap;
+		sds1-rx-swap;
+		phy-mdi-reverse;
+		phy-tx-polarity-swap;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@3 {
+				reg = <3>;
+				label = "cpu";
+				ethernet = <&xgmac2>;
+				phy-mode = "10gbase-r";
+
+				fixed-link {
+					speed = <10000>;
+					full-duplex;
+				};
+			};
+
+			/*
+			 * Front-panel order is not in the stock image (it lives
+			 * in the per-unit "profile" partition). This is the
+			 * Realtek reference order also used by the GL-BE9300;
+			 * check it with a cable before relying on the labels.
+			 */
+			port@4 {
+				reg = <4>;
+				label = "lan4";
+				phy-mode = "internal";
+			};
+
+			port@5 {
+				reg = <5>;
+				label = "lan3";
+				phy-mode = "internal";
+			};
+
+			port@6 {
+				reg = <6>;
+				label = "lan2";
+				phy-mode = "internal";
+			};
+
+			port@7 {
+				reg = <7>;
+				label = "lan1";
+				phy-mode = "internal";
+			};
+		};
+	};
+};
+
+&qcom_ppe {
+	status = "okay";
+
+	ethernet-ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* uniphy0, stock switch_mac_mode 0x0c (SGMII+) */
+		xgmac1: port@1 {
+			reg = <1>;
+			phy-mode = "2500base-x";
+			label = "wan";
+			pcs-handle = <&pcs0_ch0>;
+			phy-handle = <&wan_phy>;
+			clocks = <&nsscc NSS_CC_PORT1_MAC_CLK>,
+				 <&nsscc NSS_CC_PORT1_RX_CLK>,
+				 <&nsscc NSS_CC_PORT1_TX_CLK>;
+			clock-names = "mac",
+				      "rx",
+				      "tx";
+			resets = <&nsscc NSS_CC_PORT1_MAC_CLK_ARES>,
+				 <&nsscc NSS_CC_PORT1_RX_CLK_ARES>,
+				 <&nsscc NSS_CC_PORT1_TX_CLK_ARES>;
+			reset-names = "mac",
+				      "rx",
+				      "tx";
+		};
+
+		/* uniphy1, stock switch_mac_mode1 0x0d + xfi-mode (10GBASE-R) */
+		xgmac2: port@2 {
+			reg = <2>;
+			phy-mode = "10gbase-r";
+			label = "lan";
+			pcs-handle = <&pcs1_ch0>;
+			clocks = <&nsscc NSS_CC_PORT2_MAC_CLK>,
+				 <&nsscc NSS_CC_PORT2_RX_CLK>,
+				 <&nsscc NSS_CC_PORT2_TX_CLK>;
+			clock-names = "mac",
+				      "rx",
+				      "tx";
+			resets = <&nsscc NSS_CC_PORT2_MAC_CLK_ARES>,
+				 <&nsscc NSS_CC_PORT2_RX_CLK_ARES>,
+				 <&nsscc NSS_CC_PORT2_TX_CLK_ARES>;
+			reset-names = "mac",
+				      "rx",
+				      "tx";
+
+			fixed-link {
+				speed = <10000>;
+				full-duplex;
+				pause;
+			};
+		};
+	};
+};
+
+&pcs0 {
+	status = "okay";
+};
+
+&pcs1 {
+	status = "okay";
+};
+
+&usb {
+	status = "okay";
+};
+
+&usbphy0 {
+	status = "okay";
+};
+
+/*
+ * phy@4b0000 is the shared PCIe/USB3 uniphy. Stock uses it as the USB
+ * SuperSpeed PHY ("qca,ipq5332-uni-ssphy") and leaves that PCIe
+ * controller disabled, so retarget the node, as on the GL-BE9300.
+ */
+&pcie0_phy {
+	compatible = "qcom,ipq5332-uniphy-usb-ss-phy";
+
+	clocks = <&gcc GCC_PCIE3X1_PHY_AHB_CLK>,
+		 <&gcc GCC_USB0_PHY_CFG_AHB_CLK>,
+		 <&gcc GCC_USB0_PIPE_CLK>;
+	clock-names = "ahb", "cfg_ahb", "pipe";
+
+	resets = <&gcc GCC_USB0_PHY_BCR>;
+
+	vdd-supply = <&usb_vbus_5v>;
+
+	status = "okay";
+};
+
+&qpic_bam {
+	status = "okay";
+};
+
+&qpic_nand {
+	pinctrl-0 = <&qspi_nand_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	flash@0 {
+		compatible = "spi-nand";
+		reg = <0>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		nand-ecc-engine = <&qpic_nand>;
+		/* stock nandcs@0: 4 bit / 512 B */
+		nand-ecc-strength = <4>;
+		nand-ecc-step-size = <512>;
+		nand-bus-width = <8>;
+
+		partitions {
+			compatible = "qcom,smem-part";
+		};
+	};
+};
+
+&pcie1_phy {
+	status = "okay";
+};
+
+&pcie1 {
+	pinctrl-0 = <&pcie1_default>;
+	pinctrl-names = "default";
+
+	perst-gpios = <&tlmm 47 GPIO_ACTIVE_LOW>;
+
+	status = "okay";
+
+	pcie@0 {
+		/*
+		 * Dual-MAC QCN9224: MAC0 = 5 GHz, MAC1 = 6 GHz. Stock CNSS
+		 * board_id 0x1019 (bdwlan.b1019), same as the GL-BE9300.
+		 */
+		wifi1: pcie@0 {
+			compatible = "pci17cb,1109";
+			reg = <0x00010000 0 0 0 0>;
+			memory-region = <&qcn9274_host_ddr>, <&mlo_mem>;
+			memory-region-names = "host-ddr-mem", "mlo-global-mem";
+			qcom,ath12k-fw-memory-mode = <1>;
+			qcom,board-id = <0x1019>;
+			qcom,num-radios = <2>;
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+
+					wifi1_wsi_tx: endpoint {
+						remote-endpoint = <&wifi0_wsi_rx>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					wifi1_wsi_rx: endpoint {
+						remote-endpoint = <&wifi0_wsi_tx>;
+					};
+				};
+			};
+		};
+	};
+};
+
+&ref_48mhz_clk {
+	clock-div = <1>;
+	clock-mult = <1>;
+};
+
+&sleep_clk {
+	clock-frequency = <32000>;
+};
+
+&xo_board {
+	clock-div = <2>;
+	clock-mult = <1>;
+};
+
+&xo_clk {
+	clock-frequency = <48000000>;
+};
+
+/*
+ * IPQ5332 2.4 GHz radio. The only stock BDF is bdwlan.b12, i.e. board
+ * id 0x12 (18); the stock DT says 0x16. The board-2.bin carries the
+ * same data under both ids, and 18 is used here to match the BDF.
+ */
+&wifi0 {
+	firmware-name = "ath12k/IPQ5332/hw1.0/q6_fw1.mdt",
+			"ath12k/IPQ5332/hw1.0/iu_fw.mdt";
+	memory-region = <&q6_region>, <&q6_host_ddr>, <&m3_dump>, <&q6_caldb>,
+			<&mlo_mem>, <&q6_etr>;
+	memory-region-names = "q6-region", "host-ddr-mem", "m3-dump", "q6-caldb",
+			      "mlo-global-mem", "q6-etr-dump";
+	qcom,board-id = <18>;
+	qcom,rproc = <&q6v5_wcss>;
+	qcom,wsi-controller;
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			wifi0_wsi_tx: endpoint {
+				remote-endpoint = <&wifi1_wsi_rx>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+
+			wifi0_wsi_rx: endpoint {
+				remote-endpoint = <&wifi1_wsi_tx>;
+			};
+		};
+	};
+};
+
+&q6v5_wcss {
+	firmware-name = "ath12k/IPQ5332/hw1.0/q6_fw0.mdt";
+	/* stock: qcom,bootargs_smem = <0x1fb>, qcom,bootargs_version = <2> */
+	qcom,bootargs_smem = <507>;
+	qcom,bootargs_version = <2>;
+	upd-firmware-names = "ath12k/IPQ5332/hw1.0/q6_fw1.mdt";
+	status = "okay";
+};
+
+/* stock wcnss@4a900000 is 0x2300000 long, see the GL-BE9300 note */
+&q6_region {
+	reg = <0x0 0x4a900000 0x0 0x02300000>;
+};

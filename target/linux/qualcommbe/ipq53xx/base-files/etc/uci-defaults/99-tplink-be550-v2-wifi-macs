@@ -1,0 +1,33 @@
+#!/bin/sh
+# ath12k takes its MAC from firmware board data, so without this the BSSIDs
+# are not tied to the unit. Pin each AP interface to an address derived from
+# the factory MAC in tp_data/default-mac (as on the BE550 v1: LAN = base,
+# WAN = base + 1, Wi-Fi from base + 2). Sections that already set macaddr
+# are left alone.
+. /lib/functions.sh
+. /lib/functions/system.sh
+
+[ "$(board_name)" = "tplink,archer-be550-v2" ] || exit 0
+
+base=$(get_mac_binary "/tmp/tp_data/default-mac" 0)
+[ -n "$base" ] || exit 0
+
+n=2
+set_wifi_mac() {
+	local section="$1"
+	local mac mode
+
+	config_get mac "$section" macaddr
+	[ -n "$mac" ] && return 0
+	config_get mode "$section" mode
+	[ "$mode" = "ap" ] || return 0
+
+	uci set "wireless.$section.macaddr=$(macaddr_add "$base" $n)"
+	n=$((n + 1))
+}
+
+config_load wireless
+config_foreach set_wifi_mac wifi-iface
+uci commit wireless
+
+exit 0

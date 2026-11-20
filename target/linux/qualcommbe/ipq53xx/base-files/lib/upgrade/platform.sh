@@ -1,5 +1,6 @@
 REQUIRE_IMAGE_METADATA=1
-RAMFS_COPY_BIN='dumpimage fitblk fit_check_sign'
+RAMFS_COPY_BIN='dumpimage fitblk fit_check_sign fw_printenv fw_setenv grep'
+RAMFS_COPY_DATA='/etc/fw_env.config /var/lock/fw_printenv.lock'
 
 gl_be6500_remove_oem_rootfs() {
 	local mtdnum
@@ -27,6 +28,57 @@ gl_be6500_remove_oem_rootfs() {
 	}
 }
 
+tplink_be550_v2_check_env() {
+	# fw_setenv on a wrong env offset/size would write a fresh, default
+	# environment. Only continue if the existing one reads back with a
+	# valid CRC and holds TP-Link's slot selector.
+	local out
+
+	out=$(fw_printenv 2>&1) || {
+		echo "Cannot read the U-Boot environment, not upgrading"
+		return 1
+	}
+	case "$out" in
+	*"Bad CRC"*)
+		echo "U-Boot environment has a bad CRC (wrong fw_env.config?), not upgrading"
+		return 1
+		;;
+	esac
+	echo "$out" | grep -q '^bootcmd=' || {
+		echo "U-Boot environment has no bootcmd, not upgrading"
+		return 1
+	}
+}
+
+tplink_be550_v2_do_upgrade() {
+	# Dual boot, as in the Archer BE550 v1 port by Patrick Lawler
+	# (https://github.com/openwrt/openwrt/pull/25470): install into the inactive
+	# rootfs/rootfs_1 slot and point tp_boot_idx at it only once it is
+	# fully written. TP-Link's U-Boot falls back to the other slot if
+	# the selected one fails to load.
+	local idx=1
+
+	CI_UBIPART="rootfs_1"
+	if grep -q 'ubi.mtd=rootfs_1' /proc/cmdline; then
+		idx=0
+		CI_UBIPART="rootfs"
+	fi
+
+	tplink_be550_v2_check_env || nand_do_upgrade_failed
+
+	# a slot last written by the stock firmware holds its "ubi_rootfs"
+	# volume, which leaves no room for ours
+	gl_be6500_remove_oem_rootfs || nand_do_upgrade_failed
+	sync
+
+	nand_do_flash_file "$1" || nand_do_upgrade_failed
+	fw_setenv tp_boot_idx $idx || {
+		echo "failed to set tp_boot_idx $idx"
+		nand_do_upgrade_failed
+	}
+	nand_do_upgrade_success
+}
+
 platform_do_upgrade() {
 	case "$(board_name)" in
 	gl.inet,gl-be6500)
@@ -43,6 +95,9 @@ platform_do_upgrade() {
 		CI_KERNPART="kernel0"
 		fit_do_upgrade "$1"
 		;;
+	tplink,archer-be550-v2)
+		tplink_be550_v2_do_upgrade "$1"
+		;;
 	*)
 		echo "Sysupgrade is not supported on your board yet."
 		return 1
@@ -54,7 +109,8 @@ platform_check_image() {
 	[ "$#" -gt 1 ] && return 1
 
 	case "$(board_name)" in
-	gl.inet,gl-be6500)
+	gl.inet,gl-be6500|\
+	tplink,archer-be550-v2)
 		return 0
 		;;
 	gl.inet,gl-be9300)
