@@ -22,6 +22,8 @@ import pprint
 import re
 import struct
 
+MAX_SECTIONS = 64
+
 
 def decode_header(datafile):
     '''Read the tplink2023 image header and decode it into a dictionary'''
@@ -30,14 +32,25 @@ def decode_header(datafile):
     datafile.seek(0x1014)
 
     header['items'] = []
+    seen = set()
 
     while True:
+        # the table is attacker-controlled when analysing vendor images:
+        # bound the walk and refuse loops
+        if len(header['items']) >= MAX_SECTIONS:
+            raise ValueError('Too many sections in partition table')
+        if datafile.tell() in seen:
+            raise ValueError('Partition table loops')
+        seen.add(datafile.tell())
+
         entry = datafile.read(0x2c)
+        if len(entry) != 0x2c:
+            raise ValueError('Truncated partition table')
         fmt = '>32s3I'
         fields = struct.unpack(fmt, entry)
 
         section = {}
-        section['name'] = fields[0].decode("utf-8").rstrip('\0')
+        section['name'] = fields[0].decode("utf-8", "replace").rstrip('\0')
         section['offset'] = 0x1014 + fields[1]
         section['size'] = fields[3]
         header['items'].append(section)
@@ -62,6 +75,12 @@ def decode_header(datafile):
 
     return header
 
+def safe_section_filename(name):
+    '''Map a section name from the image to a file name in the current directory'''
+    if not re.fullmatch(r'[A-Za-z0-9._-]{1,32}', name) or name in ('.', '..'):
+        raise ValueError(f'Refusing unsafe section name {name!r}')
+    return f'{name}.bin'
+
 def extract(datafile):
     '''Extract the sections of the tplink2023 image to separate files'''
     header = decode_header(datafile)
@@ -73,7 +92,7 @@ def extract(datafile):
         datafile.seek(section['offset'])
         section_contents = datafile.read(section['size'])
 
-        with open(f"{section['name']}.bin", 'wb') as section_file:
+        with open(safe_section_filename(section['name']), 'wb') as section_file:
             section_file.write(section_contents)
 
     rootfs = header['rootfs']
