@@ -1,0 +1,66 @@
+name: Hardware test report
+description: Result of booting or installing this port on a real router
+labels:
+  - hardware-report
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing. Remove MAC addresses, serial numbers, Wi-Fi keys and
+        public IP addresses from logs before you post them. Do not attach stock
+        firmware files or dumps of the ART / tp_data partitions.
+  - type: dropdown
+    id: model
+    attributes:
+      label: Model
+      options:
+        - Archer BE550 v2
+        - Archer BE9300 v2
+    validations:
+      required: true
+  - type: input
+    id: hwver
+    attributes:
+      label: Hardware version and region on the label
+      placeholder: "Ver 2.0, EU"
+    validations:
+      required: true
+  - type: input
+    id: stock
+    attributes:
+      label: Stock firmware version before the test
+      placeholder: "1.3.3 Build 20260623 rel.27273"
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit of this repository you built
+    validations:
+      required: true
+  - type: dropdown
+    id: method
+    attributes:
+      label: How did you boot it
+      options:
+        - initramfs over UART + TFTP (nothing written to flash)
+        - web-ui-factory.bin from the stock web UI
+        - other (describe below)
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What works, what does not
+      description: Boot, WAN, each LAN jack, Wi-Fi 2.4 / 5 / 6 GHz, LED, buttons, USB, sysupgrade.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        UART boot log, or the output of:
+        `dmesg | grep -iE 'ath12k|mhi|rtl837|be9300v2|ppe|i2c|ubi'`,
+        `cat /etc/be550v2/wifi-fw-state`, `iw dev`, `ip -br link`, `free -m`
+      render: text

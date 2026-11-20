@@ -1,0 +1,35 @@
+name: Bug report
+description: A problem with this port on an Archer BE550 v2 or BE9300 v2
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Only for the TP-Link Archer BE550 v2 / BE9300 v2 support in this tree.
+        Problems with the base tree (IPQ5332 target, ath12k, RTL8372 driver) may
+        belong to https://github.com/perceival/openwrt-flint3 . Check there first.
+        Remove MAC addresses, serial numbers and Wi-Fi keys from logs.
+  - type: input
+    id: model
+    attributes:
+      label: Model and hardware version
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit of this repository
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happens, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      render: text

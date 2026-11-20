@@ -1,8 +1,13 @@
-Thanks for your contribution to OpenWrt!
+Before you open this pull request, check:
 
-To help keep the codebase consistent and readable,
-and to help people review your contribution,
-we ask you to follow the rules you find in the wiki at this link
-https://openwrt.org/submitting-patches
+- [ ] Each commit has `Signed-off-by:` with your real name
+      (https://openwrt.org/submitting-patches).
+- [ ] The description says what you tested and on which hardware.
+      "Not tested on hardware" is a valid answer; say it.
+- [ ] No proprietary files: no stock firmware, no vendor source code
+      without a GPL-compatible licence, no dumps of ART / tp_data.
+- [ ] Code taken from another project names the author and the source.
+- [ ] If an AI tool wrote part of the change, the commit has an
+      `Assisted-by:` trailer.
 
-Please remove this message before posting the pull request.
+See CONTRIBUTING.md.
