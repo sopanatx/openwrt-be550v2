@@ -1,5 +1,5 @@
 REQUIRE_IMAGE_METADATA=1
-RAMFS_COPY_BIN='dumpimage fitblk fit_check_sign fw_printenv fw_setenv grep'
+RAMFS_COPY_BIN='dumpimage fitblk fit_check_sign fw_printenv fw_setenv grep be550v2-i2cw'
 RAMFS_COPY_DATA='/etc/fw_env.config /var/lock/fw_printenv.lock'
 
 gl_be6500_remove_oem_rootfs() {
@@ -50,6 +50,18 @@ tplink_be550_v2_check_env() {
 	}
 }
 
+# Stock LED event UPGRADE (166) on the LED controller MCU (I2C 0x50). Runs
+# in the sysupgrade ramfs, so no helper script; failure is not an error.
+tplink_be550_v2_led_upgrade() {
+	local d
+
+	for d in /sys/bus/i2c/devices/i2c-*; do
+		[ "$(cat "$d/of_node/name" 2>/dev/null)" = "i2c" ] || continue
+		be550v2-i2cw "${d##*-}" 0x50 166 2>/dev/null
+		return 0
+	done
+}
+
 tplink_be550_v2_do_upgrade() {
 	# Dual boot, as in the Archer BE550 v1 port by Patrick Lawler
 	# (https://github.com/openwrt/openwrt/pull/25470): install into the inactive
@@ -65,6 +77,7 @@ tplink_be550_v2_do_upgrade() {
 	fi
 
 	tplink_be550_v2_check_env || nand_do_upgrade_failed
+	tplink_be550_v2_led_upgrade
 
 	# a slot last written by the stock firmware holds its "ubi_rootfs"
 	# volume, which leaves no room for ours

@@ -1,0 +1,11 @@
+# Archer BE550 v2: follow the WAN state on the front LED.
+
+. /lib/functions.sh
+
+[ "$(board_name)" = "tplink,archer-be550-v2" ] || exit 0
+[ "$INTERFACE" = "wan" ] || exit 0
+
+case "$ACTION" in
+ifup)	/usr/sbin/be550v2-led status internet-up 2>/dev/null ;;
+ifdown)	/usr/sbin/be550v2-led status internet-down 2>/dev/null ;;
+esac

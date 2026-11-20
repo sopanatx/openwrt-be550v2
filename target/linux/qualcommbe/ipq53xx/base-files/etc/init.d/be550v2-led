@@ -1,11 +1,27 @@
 #!/bin/sh /etc/rc.common
-# Archer BE550 v2: show a steady LED once boot is done.
+# Archer BE550 v2: front LED status, with the stock event codes.
 
 START=99
+STOP=10
+
+is_board() {
+	. /lib/functions.sh
+	[ "$(board_name)" = "tplink,archer-be550-v2" ]
+}
 
 boot() {
-	. /lib/functions.sh
-	[ "$(board_name)" = "tplink,archer-be550-v2" ] || return 0
-	/usr/sbin/be550v2-led on 2>/dev/null
+	is_board || return 0
+	. /lib/functions/network.sh
+	if network_flush_cache && network_is_up wan; then
+		/usr/sbin/be550v2-led status internet-up 2>/dev/null
+	else
+		/usr/sbin/be550v2-led status internet-down 2>/dev/null
+	fi
+	return 0
+}
+
+shutdown() {
+	is_board || return 0
+	/usr/sbin/be550v2-led status reboot 2>/dev/null
 	return 0
 }

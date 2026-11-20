@@ -125,9 +125,6 @@ define Device/tplink_archer-be550-v2
 	DEVICE_VENDOR := TP-Link
 	DEVICE_MODEL := Archer BE550
 	DEVICE_VARIANT := v2
-	DEVICE_ALT0_VENDOR := TP-Link
-	DEVICE_ALT0_MODEL := Archer BE9300
-	DEVICE_ALT0_VARIANT := v2
 	SOC := ipq5332
 	DEVICE_DTS_CONFIG := config@1
 	TPLINK_FIT_CONFIGS := config@BE550_2_0_0 config@mi01.6 config-1
@@ -145,11 +142,15 @@ define Device/tplink_archer-be550-v2
 	IMAGE/sysupgrade.bin/squashfs := sysupgrade-tar | append-metadata
 	IMAGES += web-ui-factory.bin
 	IMAGE/web-ui-factory.bin := append-ubi | check-size | tplink-image-2023
-	# Stock nvrammanager rejects an image whose soft_ver major.minor
-	# (major.minor.patch on SG units) is older than the installed one.
-	# This is the stock 1.3.3 string; set it to the installed version if
-	# the router already runs a newer stock release.
-	TPLINK_SOFT_VERSION := soft_ver:1.3.3 Build 20260623 rel.27273\n
+	# Stock nvrammanager rejects an image whose soft_ver is older than the
+	# installed one (major.minor; major.minor.patch on SG units). The
+	# version from the image is only compared, never stored (stock writes
+	# just default-mac, pin, device-id, product-info, radio_bk and
+	# radio_sec_bk to tp_data), so use one no stock release exceeds.
+	TPLINK_SOFT_VERSION := soft_ver:9.9.9 Build 20260623 rel.27273\n
+	# The stock support list also names the Archer BE9300 v2. That unit has
+	# a different switch (rtl8367s, stock default-config section
+	# BE9300_2_0_0), so it is left out: this image has no LAN there.
 	TPLINK_SUPPORT_STRING := SupportList:\n\
 		{product_name:Archer BE550,product_ver:2.0.0,special_id:55530000}\n\
 		{product_name:Archer BE550,product_ver:2.6.0,special_id:55530000}\n\
@@ -160,8 +161,7 @@ define Device/tplink_archer-be550-v2
 		{product_name:Archer BE550,product_ver:2.0.0,special_id:45550000}\n\
 		{product_name:Archer BE550,product_ver:2.0.0,special_id:4A500000}\n\
 		{product_name:Archer BE550,product_ver:2.0.0,special_id:4B520000}\n\
-		{product_name:Archer BE550,product_ver:2.0.0,special_id:53470000}\n\
-		{product_name:Archer BE9300,product_ver:2.0.0,special_id:55530000}\n
+		{product_name:Archer BE550,product_ver:2.0.0,special_id:53470000}\n
 	DEVICE_PACKAGES := kmod-ath12k ath12k-firmware-ipq5332 \
 		ath12k-firmware-qcn9274 ipq-wifi-tplink_archer-be550-v2 \
 		kmod-qrtr-smd kmod-rtl837x-dsa kmod-phy-realtek \
