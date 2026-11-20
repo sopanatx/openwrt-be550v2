@@ -71,7 +71,7 @@ in the image and was checked against stock data or stock code.
 | LAN switch, BE550 v2 | Built | register setup matches the stock driver |
 | LAN port order, BE550 v2 | Built | from the stock configuration, not checked with a cable |
 | LAN switch, BE9300 v2 | Built | unmanaged, see below |
-| Wi-Fi 2.4 / 5 / 6 GHz | Unknown | see "Wi-Fi firmware" |
+| Wi-Fi 2.4 / 5 / 6 GHz | Unknown | firmware signing, see "Wi-Fi firmware" |
 | Wi-Fi MAC addresses, calibration | Built | read from the stock partitions |
 | LED | Built | frames equal the stock ones byte for byte, not tried on the microcontroller |
 | Buttons, USB | Built | |
@@ -80,25 +80,52 @@ in the image and was checked against stock data or stock code.
 
 ### Wi-Fi firmware
 
-The stock firmware for the 2.4 GHz radio is signed by TP-Link. The
-firmware that OpenWrt ships is signed by Qualcomm. If the SoC accepts only
-TP-Link's signature, the 2.4 GHz radio does not start, and the 5 and 6 GHz
-radios stay down with it (the three radios are linked for MLO).
+Both Wi-Fi chips check the signature of their firmware, and the firmware
+that OpenWrt ships may be refused:
 
-The image handles this without user action:
+| Chip | Stock firmware | OpenWrt firmware |
+|---|---|---|
+| IPQ5332 Q6 (2.4 GHz) | TP-Link certificate chain | Qualcomm |
+| QCN9274 family (5 + 6 GHz) | Qualcomm production root | Qualcomm test root |
 
-1. The first boot copies the router's own stock firmware files from the
-   stock slot to `/etc/be550v2/stock-q6`. A sysupgrade keeps them.
+The Archer BE550 v1 refuses the OpenWrt 5/6 GHz firmware for this reason
+(`mhi mhi0: Image transfer failed`, `ERROR_CODE value: 0xef0a0002`) and
+runs with the stock one. The v2 probably does the same. The three radios
+are linked for MLO, so if one firmware is refused, no band comes up.
+
+The stock firmware cannot be redistributed. The image takes it from your
+own router instead, without user action:
+
+1. The first boot copies the stock Wi-Fi firmware from the stock slot to
+   `/etc/be550v2` (about 15 MB). A sysupgrade keeps it.
 2. `be550v2-wifi-check` runs at each boot. If no Wi-Fi device appears in
-   180 seconds, it installs the stock files and reboots once.
-3. If Wi-Fi still does not start, it restores the OpenWrt files, writes
-   `/etc/be550v2/wifi-fail.log` and stops.
+   180 seconds, it changes to the next firmware set and reboots:
 
-State: `cat /etc/be550v2/wifi-fw-state`. Manual control:
-`be550v2-stock-wifi-fw install|remove`.
+   | Set | 2.4 GHz | 5 + 6 GHz |
+   |---|---|---|
+   | `upstream` | OpenWrt | OpenWrt |
+   | `stock-qcn` | OpenWrt | stock |
+   | `stock-all` | stock | stock |
+   | `stock-q6` | stock | OpenWrt |
 
-It is possible that neither firmware works with ath12k. Then no band
-works until someone finds the cause.
+3. After the last set it restores the OpenWrt firmware and stops. The
+   kernel log of each failed set is in `/etc/be550v2/wifi-fail.log`.
+
+So the first boot can take up to three extra reboots, about 4 minutes
+each. State: `cat /etc/be550v2/wifi-fw-state` (for example
+`stock-qcn-ok`). Manual control:
+
+```sh
+be550v2-stock-wifi-fw status
+be550v2-stock-wifi-fw install qcn      # all | q6 | qcn
+be550v2-stock-wifi-fw remove
+```
+
+When the image runs from RAM (initramfs), the check does not reboot. Use
+the commands above and reload the ath12k modules.
+
+It is possible that no firmware set works with ath12k. Then Wi-Fi stays
+down until someone finds the cause.
 
 ### Archer BE9300 v2
 
@@ -172,8 +199,11 @@ Images are in `bin/targets/qualcommbe/ipq53xx/`:
   first (3.3 V or 1.8 V) and set the adapter to match. Connect GND, RX and
   TX only, never VCC. Settings: 115200 8N1.
 - Without UART there is no known way to recover a router that does not
-  boot. A TFTP recovery mode in TP-Link's U-Boot is not confirmed for this
-  model.
+  boot. On the Archer BE550 v1, holding reset at power-on opens a U-Boot
+  web page that accepts only signed TP-Link images, and there is no TFTP
+  recovery. Expect the same on the v2.
+- On the v1 the UART header is 4 pins (TX, RX, GND, VCC) at 3.3 V. The
+  v2 header is not documented yet: measure before you connect.
 
 ### A. Test from RAM (recommended first step)
 
@@ -205,8 +235,9 @@ U-Boot falls back to that slot when the new one fails.
 
    The ART partition holds the radio calibration of your unit. It cannot
    be replaced.
-4. Wait about 4 minutes for Wi-Fi on the first boot. The router can
-   reboot once by itself to change the Wi-Fi firmware.
+4. Wait for Wi-Fi on the first boot. The router can reboot up to three
+   times by itself to find a Wi-Fi firmware that the chips accept (about
+   4 minutes each).
 
 ### Upgrade
 
@@ -250,6 +281,30 @@ The most useful things, in this order:
 
 Open an issue with the model, the hardware version and the stock firmware
 version the router had.
+
+## Related work
+
+No other OpenWrt port for the hardware version 2 was found (November
+2026). The v2 was requested in the
+[OpenWrt forum](https://forum.openwrt.org/t/port-request-for-be550/251308)
+and in the v1 pull request.
+
+- **Archer BE550 v1** is a different platform (IPQ9554, QCA8084 switch,
+  QCA8081 WAN PHY). Port: [openwrt/openwrt#25470](https://github.com/openwrt/openwrt/pull/25470),
+  based on [#20778](https://github.com/openwrt/openwrt/pull/20778). It
+  runs on hardware. Nothing from it applies to the v2 device tree, but
+  the two models share TP-Link's firmware layout. This port uses the same
+  ideas for the web UI image, the two firmware slots and `tp_data`, and
+  took from the v1 reports that the 5/6 GHz chip needs the stock
+  firmware.
+- Reports from v1 users that probably apply to the v2 too, none checked
+  here: 5 GHz works at 80 MHz but not 160 MHz on channel 36; 6 GHz works
+  at 160 MHz but not 320 MHz; `wifi reload` on an MLO interface can leave
+  it down (`wifi down; wifi up` recovers); a flood of ath12k messages on
+  the serial console can stall Wi-Fi (lower `conloglevel`).
+- The FCC photos of the v2 (FCC ID 2BH7FBE550V2) show a 1 GB DDR4 chip.
+  The stock device tree and the stock memory configuration say 512 MiB.
+  `free -m` on a running unit will settle it.
 
 ## Where the port is
 

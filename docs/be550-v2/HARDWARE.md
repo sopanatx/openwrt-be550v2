@@ -5,7 +5,7 @@ stock device tree dumped to `stock/BE550_2_0_0.dts`. File paths below are inside
 
 ## SoC / memory / flash
 - Qualcomm IPQ5332 (4x Cortex-A53), board `AP-MI01.6`, stock compatible `qcom,ipq5332-ap-mi01.6`.
-- RAM 512 MiB: stock DTS `memory` node is 0x20000000 and the CDT is `cdt-AP-MI01.6_512M16_DDR4.bin`. (The forum port request says 1 GB; the firmware says 512 MiB.)
+- RAM: stock DTS `memory` node is 0x20000000 (512 MiB) and the CDT is `cdt-AP-MI01.6_512M16_DDR4.bin`. The FCC internal photos (FCC ID 2BH7FBE550V2) show a Samsung K4A8G16 (1 GB). Not settled; U-Boot normally corrects the memory node at boot.
 - 128 MiB QSPI NAND on `nand@79b0000` (ECC 4 bit / 512 B, 8-bit bus).
 - Stock DTS also has SPI NOR node `n25q128a11`; unused by partition table (boot is NAND).
 
@@ -57,7 +57,8 @@ partitions with size 0 (stored inside `tp_data`/firmware header, not raw NAND).
 - 5 + 6 GHz: **one** QCN9224 on `pcie@18000000` (only PCIe enabled), **dual-MAC** firmware (`qcn9224/amss_dualmac.bin`, `Data_dualmac.msc`), board_id 0x1019, BDF `qcn9224/bdwlan.b1019`.
 - Calibration in ART partition (0x00900000).
 - Stock driver is proprietary `qca_ol`/`umac`/`wifi_3_0`; OpenWrt uses ath12k.
-- Stock IPQ5332 Q6 firmware (`q6_fw0.mdt`, WLAN.WBE.1.4-01734) carries a **TP-Link certificate chain** (`www.tp-link.com.cn` CA). The SoC may only accept TP-Link-signed Q6 images. The QCN9224 firmware is Qualcomm-signed.
+- Stock IPQ5332 Q6 firmware (`q6_fw0.mdt`, WLAN.WBE.1.4-01734) carries a **TP-Link certificate chain** (`www.tp-link.com.cn` CA). The SoC may only accept TP-Link-signed Q6 images.
+- Stock QCN9224 firmware (`amss_dualmac.bin`, `m3.bin`; no single-MAC `amss.bin`) is signed with Qualcomm's production root (`QSEE Attestation Root CA`). The upstream ath12k `firmware-2.bin` (WLAN.WBE.1.6) uses the test root (`QSEE Attestation Test Root CA`). The Archer BE550 v1 rejects the test-root image (BHI error 0xef0a0002).
 - Reserved memory is identical to the GL-BE9300 (same AP-MI01.6 design).
 
 ## PCIe PERST GPIOs
